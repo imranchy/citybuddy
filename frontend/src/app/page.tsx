@@ -9,6 +9,21 @@ type HealthResponse = {
   version: string;
 };
 
+type Place = {
+  id: number;
+  name: string;
+  category: string;
+  description: string | null;
+  address: string;
+  city: string;
+  country_code: string;
+  latitude: number;
+  longitude: number;
+  price_level: number | null;
+  rating: number | null;
+  dietary_options: string[];
+};
+
 const suggestedSearches = [
   {
     label: "Near me",
@@ -58,6 +73,8 @@ export default function Home() {
   const [apiStatus, setApiStatus] = useState("Connecting...");
   const [isApiConnected, setIsApiConnected] = useState(false);
   const [message, setMessage] = useState("");
+  const [places, setPlaces] = useState<Place[]>([]);
+  const [placesStatus, setPlacesStatus] = useState("Loading places...");
 
   useEffect(() => {
     fetch("http://127.0.0.1:8000/api/health")
@@ -76,6 +93,26 @@ export default function Home() {
         setApiStatus("Connection unavailable");
         setIsApiConnected(false);
       });
+
+    fetch("http://127.0.0.1:8000/api/places")
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error("The places API returned an error");
+        }
+
+        return response.json();
+      })
+      .then((data: Place[]) => {
+        setPlaces(data);
+        setPlacesStatus(
+          data.length === 1
+            ? "1 place loaded"
+            : `${data.length} places loaded`,
+        );
+      })
+      .catch(() => {
+        setPlacesStatus("Places are temporarily unavailable");
+      });
   }, []);
 
   function handleSearch(event: FormEvent<HTMLFormElement>) {
@@ -87,7 +124,7 @@ export default function Home() {
     }
 
     setMessage(
-      `Search received: “${query}”. Restaurant recommendations will be added in the next development phase.`,
+      `Search received: “${query}”. Personalised recommendation and filtering will be added in the next development phase.`,
     );
   }
 
@@ -231,8 +268,97 @@ export default function Home() {
       </section>
 
       <section
-        aria-labelledby="features-heading"
+        aria-labelledby="places-heading"
         className="border-t border-white/10 bg-[#0B112B] px-4 py-14 sm:px-6 sm:py-16"
+      >
+        <div className="mx-auto max-w-6xl">
+          <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.25em] text-[#FFC83D]">
+                Live database
+              </p>
+
+              <h2
+                id="places-heading"
+                className="mt-3 text-3xl font-bold tracking-tight sm:text-4xl"
+              >
+                Places in Turin
+              </h2>
+            </div>
+
+            <p
+              role="status"
+              aria-live="polite"
+              className="text-sm text-[#A9B1D6]"
+            >
+              {placesStatus}
+            </p>
+          </div>
+
+          {places.length > 0 ? (
+            <div className="mt-8 grid gap-5 md:grid-cols-2">
+              {places.map((place) => (
+                <article
+                  key={place.id}
+                  className="rounded-3xl border border-white/10 bg-[#121936] p-6 transition duration-200 hover:-translate-y-1 hover:border-[#FF6846]/40 sm:p-7"
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#FF6846]">
+                        {place.category}
+                      </p>
+
+                      <h3 className="mt-2 text-2xl font-semibold">
+                        {place.name}
+                      </h3>
+                    </div>
+
+                    <span className="rounded-full border border-white/10 bg-[#0B112B] px-3 py-1 text-xs text-[#A9B1D6]">
+                      {place.city}
+                    </span>
+                  </div>
+
+                  {place.description && (
+                    <p className="mt-4 leading-7 text-[#A9B1D6]">
+                      {place.description}
+                    </p>
+                  )}
+
+                  <p className="mt-5 text-sm text-[#FFF8E7]">
+                    {place.address}, {place.city}
+                  </p>
+
+                  {place.dietary_options.length > 0 && (
+                    <div className="mt-5 flex flex-wrap gap-2">
+                      {place.dietary_options.map((option) => (
+                        <span
+                          key={option}
+                          className="rounded-full border border-emerald-400/25 bg-emerald-400/10 px-3 py-1 text-xs capitalize text-emerald-300"
+                        >
+                          {option}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
+                  <p className="mt-5 text-xs text-[#A9B1D6]/70">
+                    {place.latitude.toFixed(5)},{" "}
+                    {place.longitude.toFixed(5)}
+                  </p>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <div className="mt-8 rounded-3xl border border-white/10 bg-[#121936] p-8 text-center text-[#A9B1D6]">
+              {placesStatus}
+            </div>
+          )}
+        </div>
+      </section>
+
+      <section
+        aria-labelledby="features-heading"
+        className="border-t border-white/10 bg-[#070B24] px-4 py-14 sm:px-6 sm:py-16"
       >
         <div className="mx-auto max-w-6xl">
           <h2 id="features-heading" className="sr-only">
