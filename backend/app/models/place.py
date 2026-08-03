@@ -2,6 +2,7 @@ from datetime import datetime
 from decimal import Decimal
 
 from geoalchemy2 import Geography
+
 from sqlalchemy import (
     CheckConstraint,
     DateTime,
@@ -9,9 +10,12 @@ from sqlalchemy import (
     Numeric,
     String,
     Text,
+    UniqueConstraint,
     func,
     text,
 )
+
+
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -30,6 +34,11 @@ class Place(Base):
             "rating BETWEEN 0 AND 5",
             name="ck_places_rating",
         ),
+        UniqueConstraint(
+            "source",
+            "source_id",
+            name="uq_places_source_source_id",
+        ),
     )
 
     id: Mapped[int] = mapped_column(
@@ -41,6 +50,16 @@ class Place(Base):
         String(200),
         nullable=False,
         index=True,
+    )
+
+    source: Mapped[str] = mapped_column(
+        String(30),
+        nullable=False,
+    )
+
+    source_id: Mapped[str] = mapped_column(
+        String(100),
+        nullable=False,
     )
 
     category: Mapped[str] = mapped_column(

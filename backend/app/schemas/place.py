@@ -1,6 +1,5 @@
 from pydantic import BaseModel, Field
 
-
 class PlaceRead(BaseModel):
     id: int
     name: str
@@ -14,3 +13,6 @@ class PlaceRead(BaseModel):
     price_level: int | None
     rating: float | None
     dietary_options: list[str] = Field(default_factory=list)
+
+class NearbyPlaceRead(PlaceRead):
+    distance_km: float
