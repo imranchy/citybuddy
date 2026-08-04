@@ -5,14 +5,11 @@ import { FormEvent, useEffect, useState } from "react";
 import type { Place } from "@/types/place";
 import PlaceCard from "@/components/PlaceCard";
 import PlaceFilters from "@/components/PlaceFilters";
-
-type HealthResponse = {
-  status: string;
-  application: string;
-  version: string;
-};
-
-
+import {
+  getHealth,
+  getPlaceCategories,
+  getPlaces,
+} from "@/lib/api";
 
 const suggestedSearches = [
   {
@@ -74,54 +71,50 @@ export default function Home() {
   const [isLoadingPlaces, setIsLoadingPlaces] = useState(true);
 
   useEffect(() => {
-    fetch("http://127.0.0.1:8000/api/health")
-      .then((response) => {
-        if (!response.ok) {
-          throw new Error("The API returned an error");
-        }
+    const controller = new AbortController();
 
-        return response.json();
-      })
-      .then((data: HealthResponse) => {
+    async function loadHealth() {
+      try {
+        const data = await getHealth(controller.signal);
         setApiStatus(`${data.application} is ready`);
         setIsApiConnected(true);
-      })
-      .catch(() => {
+      } catch (error) {
+        if (error instanceof Error && error.name === "AbortError") {
+          return;
+        }
+
         setApiStatus("Connection unavailable");
         setIsApiConnected(false);
-      });
+      }
+    }
+
+    loadHealth();
+
+    return () => controller.abort();
   }, []);
 
   useEffect(() => {
-  const controller = new AbortController();
+    const controller = new AbortController();
 
-  async function loadCategories() {
-    try {
-      const response = await fetch(
-        "http://127.0.0.1:8000/api/places/categories",
-        { signal: controller.signal },
-      );
+    async function loadCategories() {
+      try {
+        const data = await getPlaceCategories(controller.signal);
+        setCategories(data);
+      } catch (error) {
+        if (error instanceof Error && error.name === "AbortError") {
+          return;
+        }
 
-      if (!response.ok) {
-        throw new Error("The categories API returned an error");
+        setCategories([]);
       }
-
-      const data: string[] = await response.json();
-      setCategories(data);
-    } catch (error) {
-      if (error instanceof Error && error.name === "AbortError") {
-        return;
-      }
-
-      setCategories([]);
     }
-  }
 
-  loadCategories();
+    loadCategories();
 
-  return () => controller.abort();
-}, []);
+    return () => controller.abort();
+  }, []);
 
+  
   useEffect(() => {
   const controller = new AbortController();
 
@@ -143,23 +136,22 @@ export default function Home() {
     }
 
     try {
-      const response = await fetch(
-        `http://127.0.0.1:8000/api/places?${parameters.toString()}`,
-        { signal: controller.signal },
-      );
+      const data = await getPlaces(
+    {
+      category,
+      city,
+      limit,
+      offset,
+    },
+    controller.signal,
+  );
 
-      if (!response.ok) {
-        throw new Error("The places API returned an error");
-      }
-
-      const data: Place[] = await response.json();
-
-      setPlaces(data);
-      setPlacesStatus(
-        data.length === 1
-          ? "1 place loaded"
-          : `${data.length} places loaded`,
-      );
+  setPlaces(data);
+  setPlacesStatus(
+    data.length === 1
+      ? "1 place loaded"
+      : `${data.length} places loaded`,
+  );
     } catch (error) {
       if (error instanceof Error && error.name === "AbortError") {
         return;
