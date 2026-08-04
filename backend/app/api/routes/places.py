@@ -67,6 +67,24 @@ def list_places(
     ]
 
 @router.get(
+    "/categories",
+    response_model=list[str],
+)
+def list_place_categories(
+    database: Annotated[Session, Depends(get_db)],
+) -> list[str]:
+    statement = (
+        select(Place.category)
+        .where(Place.category.is_not(None))
+        .distinct()
+        .order_by(Place.category)
+    )
+
+    categories = database.scalars(statement).all()
+
+    return list(categories)
+
+@router.get(
     "/nearby",
     response_model=list[NearbyPlaceRead],
 )
