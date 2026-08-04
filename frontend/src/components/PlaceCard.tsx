@@ -46,6 +46,14 @@ export default function PlaceCard({ place }: PlaceCardProps) {
         </div>
       )}
 
+    {place.distance_km !== undefined && (
+        <p className="mt-5 text-sm font-medium text-[#FFC83D]">
+            {place.distance_km < 1
+            ? `${Math.round(place.distance_km * 1000)} m away`
+            : `${place.distance_km.toFixed(1)} km away`}
+        </p>
+        )}
+
       <p className="mt-5 text-xs text-[#A9B1D6]/70">
         {place.latitude.toFixed(5)},{" "}
         {place.longitude.toFixed(5)}

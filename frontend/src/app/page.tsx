@@ -7,9 +7,12 @@ import PlaceCard from "@/components/PlaceCard";
 import PlaceFilters from "@/components/PlaceFilters";
 import {
   getHealth,
+  getNearbyPlaces,
   getPlaceCategories,
   getPlaces,
 } from "@/lib/api";
+import LocationControls from "@/components/LocationControls";
+
 
 const suggestedSearches = [
   {
@@ -69,6 +72,15 @@ export default function Home() {
   const [limit, setLimit] = useState(10);
   const [offset, setOffset] = useState(0);
   const [isLoadingPlaces, setIsLoadingPlaces] = useState(true);
+
+  const [userLocation, setUserLocation] = useState<{
+  latitude: number;
+  longitude: number;
+} | null>(null);
+
+const [radiusKm, setRadiusKm] = useState(2);
+const [isLocating, setIsLocating] = useState(false);
+const [locationStatus, setLocationStatus] = useState("");
 
   useEffect(() => {
     const controller = new AbortController();
@@ -136,15 +148,26 @@ export default function Home() {
     }
 
     try {
-      const data = await getPlaces(
-    {
-      category,
-      city,
-      limit,
-      offset,
-    },
-    controller.signal,
-  );
+      const data = userLocation
+  ? await getNearbyPlaces(
+      {
+        latitude: userLocation.latitude,
+        longitude: userLocation.longitude,
+        radiusKm,
+        category,
+        limit,
+      },
+      controller.signal,
+    )
+  : await getPlaces(
+      {
+        category,
+        city,
+        limit,
+        offset,
+      },
+      controller.signal,
+    );
 
   setPlaces(data);
   setPlacesStatus(
@@ -169,7 +192,44 @@ export default function Home() {
   loadPlaces();
 
   return () => controller.abort();
-}, [category, city, limit, offset]);
+}, [ category, city, limit, offset, radiusKm, userLocation]);
+
+  function handleUseLocation() {
+    if (!navigator.geolocation) {
+      setLocationStatus(
+        "Location services are not supported by this browser.",
+      );
+      return;
+    }
+
+    setIsLocating(true);
+    setLocationStatus("Requesting your location...");
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setUserLocation({
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+        });
+        setOffset(0);
+        setIsLocating(false);
+        setLocationStatus(
+          `Showing places within ${radiusKm} km of you.`,
+        );
+      },
+      () => {
+        setIsLocating(false);
+        setLocationStatus(
+          "Unable to access your location. Check browser permission.",
+        );
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 300000,
+      },
+    );
+  }
 
   function handleSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -378,6 +438,28 @@ export default function Home() {
             }}
           />
 
+          <LocationControls
+            radiusKm={radiusKm}
+            isLocating={isLocating}
+            locationStatus={locationStatus}
+            isNearbyMode={userLocation !== null}
+            onRadiusChange={(newRadius) => {
+              setRadiusKm(newRadius);
+
+              if (userLocation) {
+                setLocationStatus(
+                  `Showing places within ${newRadius} km of you.`,
+                );
+              }
+            }}
+            onUseLocation={handleUseLocation}
+            onExitNearbyMode={() => {
+              setUserLocation(null);
+              setLocationStatus("");
+              setOffset(0);
+            }}
+          />
+
           {isLoadingPlaces ? (
             <div className="mt-8 rounded-3xl border border-white/10 bg-[#121936] p-8 text-center text-[#A9B1D6]">
               Loading places...
@@ -394,7 +476,7 @@ export default function Home() {
             </div>
           )}
 
-          {!isLoadingPlaces && places.length > 0 && (
+          {!isLoadingPlaces && places.length > 0 &&  !userLocation && (
             <div className="mt-8 flex items-center justify-between gap-4">
               <button
                 type="button"

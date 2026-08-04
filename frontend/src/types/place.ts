@@ -11,4 +11,5 @@ export type Place = {
   price_level: number | null;
   rating: number | null;
   dietary_options: string[];
+  distance_km?: number;
 };

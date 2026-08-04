@@ -16,6 +16,14 @@ type PlacesQuery = {
   offset: number;
 };
 
+type NearbyPlacesQuery = {
+  latitude: number;
+  longitude: number;
+  radiusKm: number;
+  category: string;
+  limit: number;
+};
+
 async function getJson<T>(
   path: string,
   signal?: AbortSignal,
@@ -62,6 +70,27 @@ export function getPlaces(
 
   return getJson<Place[]>(
     `/api/places?${parameters.toString()}`,
+    signal,
+  );
+}
+
+export function getNearbyPlaces(
+  query: NearbyPlacesQuery,
+  signal?: AbortSignal,
+): Promise<Place[]> {
+  const parameters = new URLSearchParams({
+    latitude: query.latitude.toString(),
+    longitude: query.longitude.toString(),
+    radius_km: query.radiusKm.toString(),
+    limit: query.limit.toString(),
+  });
+
+  if (query.category) {
+    parameters.set("category", query.category);
+  }
+
+  return getJson<Place[]>(
+    `/api/places/nearby?${parameters.toString()}`,
     signal,
   );
 }
