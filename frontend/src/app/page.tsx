@@ -2,6 +2,9 @@
 
 import Image from "next/image";
 import { FormEvent, useEffect, useState } from "react";
+import type { Place } from "@/types/place";
+import PlaceCard from "@/components/PlaceCard";
+import PlaceFilters from "@/components/PlaceFilters";
 
 type HealthResponse = {
   status: string;
@@ -9,20 +12,7 @@ type HealthResponse = {
   version: string;
 };
 
-type Place = {
-  id: number;
-  name: string;
-  category: string;
-  description: string | null;
-  address: string;
-  city: string;
-  country_code: string;
-  latitude: number;
-  longitude: number;
-  price_level: number | null;
-  rating: number | null;
-  dietary_options: string[];
-};
+
 
 const suggestedSearches = [
   {
@@ -75,6 +65,13 @@ export default function Home() {
   const [message, setMessage] = useState("");
   const [places, setPlaces] = useState<Place[]>([]);
   const [placesStatus, setPlacesStatus] = useState("Loading places...");
+  const [category, setCategory] = useState("");
+  const [categories, setCategories] = useState<string[]>([]);
+  const [cityInput, setCityInput] = useState("Torino");
+  const [city, setCity] = useState("Torino");
+  const [limit, setLimit] = useState(10);
+  const [offset, setOffset] = useState(0);
+  const [isLoadingPlaces, setIsLoadingPlaces] = useState(true);
 
   useEffect(() => {
     fetch("http://127.0.0.1:8000/api/health")
@@ -93,27 +90,94 @@ export default function Home() {
         setApiStatus("Connection unavailable");
         setIsApiConnected(false);
       });
-
-    fetch("http://127.0.0.1:8000/api/places")
-      .then((response) => {
-        if (!response.ok) {
-          throw new Error("The places API returned an error");
-        }
-
-        return response.json();
-      })
-      .then((data: Place[]) => {
-        setPlaces(data);
-        setPlacesStatus(
-          data.length === 1
-            ? "1 place loaded"
-            : `${data.length} places loaded`,
-        );
-      })
-      .catch(() => {
-        setPlacesStatus("Places are temporarily unavailable");
-      });
   }, []);
+
+  useEffect(() => {
+  const controller = new AbortController();
+
+  async function loadCategories() {
+    try {
+      const response = await fetch(
+        "http://127.0.0.1:8000/api/places/categories",
+        { signal: controller.signal },
+      );
+
+      if (!response.ok) {
+        throw new Error("The categories API returned an error");
+      }
+
+      const data: string[] = await response.json();
+      setCategories(data);
+    } catch (error) {
+      if (error instanceof Error && error.name === "AbortError") {
+        return;
+      }
+
+      setCategories([]);
+    }
+  }
+
+  loadCategories();
+
+  return () => controller.abort();
+}, []);
+
+  useEffect(() => {
+  const controller = new AbortController();
+
+  async function loadPlaces() {
+    setIsLoadingPlaces(true);
+    setPlacesStatus("Loading places...");
+
+    const parameters = new URLSearchParams({
+      limit: limit.toString(),
+      offset: offset.toString(),
+    });
+
+    if (category) {
+      parameters.set("category", category);
+    }
+
+    if (city.trim()) {
+      parameters.set("city", city.trim());
+    }
+
+    try {
+      const response = await fetch(
+        `http://127.0.0.1:8000/api/places?${parameters.toString()}`,
+        { signal: controller.signal },
+      );
+
+      if (!response.ok) {
+        throw new Error("The places API returned an error");
+      }
+
+      const data: Place[] = await response.json();
+
+      setPlaces(data);
+      setPlacesStatus(
+        data.length === 1
+          ? "1 place loaded"
+          : `${data.length} places loaded`,
+      );
+    } catch (error) {
+      if (error instanceof Error && error.name === "AbortError") {
+        return;
+      }
+
+      setPlaces([]);
+      setPlacesStatus("Places are temporarily unavailable");
+    } finally {
+      if (!controller.signal.aborted) {
+        setIsLoadingPlaces(false);
+      }
+    }
+  }
+
+  loadPlaces();
+
+  return () => controller.abort();
+}, [category, city, limit, offset]);
 
   function handleSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -295,62 +359,78 @@ export default function Home() {
             </p>
           </div>
 
-          {places.length > 0 ? (
+         <PlaceFilters
+            categories={categories}
+            category={category}
+            cityInput={cityInput}
+            limit={limit}
+            onCategoryChange={(newCategory) => {
+              setCategory(newCategory);
+              setOffset(0);
+            }}
+            onCityInputChange={setCityInput}
+            onLimitChange={(newLimit) => {
+              setLimit(newLimit);
+              setOffset(0);
+            }}
+            onApply={() => {
+              setCity(cityInput.trim());
+              setOffset(0);
+            }}
+            onClear={() => {
+              setCategory("");
+              setCityInput("Torino");
+              setCity("Torino");
+              setLimit(10);
+              setOffset(0);
+            }}
+          />
+
+          {isLoadingPlaces ? (
+            <div className="mt-8 rounded-3xl border border-white/10 bg-[#121936] p-8 text-center text-[#A9B1D6]">
+              Loading places...
+            </div>
+          ) : places.length > 0 ? (
             <div className="mt-8 grid gap-5 md:grid-cols-2">
               {places.map((place) => (
-                <article
-                  key={place.id}
-                  className="rounded-3xl border border-white/10 bg-[#121936] p-6 transition duration-200 hover:-translate-y-1 hover:border-[#FF6846]/40 sm:p-7"
-                >
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#FF6846]">
-                        {place.category}
-                      </p>
-
-                      <h3 className="mt-2 text-2xl font-semibold">
-                        {place.name}
-                      </h3>
-                    </div>
-
-                    <span className="rounded-full border border-white/10 bg-[#0B112B] px-3 py-1 text-xs text-[#A9B1D6]">
-                      {place.city}
-                    </span>
-                  </div>
-
-                  {place.description && (
-                    <p className="mt-4 leading-7 text-[#A9B1D6]">
-                      {place.description}
-                    </p>
-                  )}
-
-                  <p className="mt-5 text-sm text-[#FFF8E7]">
-                    {place.address}, {place.city}
-                  </p>
-
-                  {place.dietary_options.length > 0 && (
-                    <div className="mt-5 flex flex-wrap gap-2">
-                      {place.dietary_options.map((option) => (
-                        <span
-                          key={option}
-                          className="rounded-full border border-emerald-400/25 bg-emerald-400/10 px-3 py-1 text-xs capitalize text-emerald-300"
-                        >
-                          {option}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-
-                  <p className="mt-5 text-xs text-[#A9B1D6]/70">
-                    {place.latitude.toFixed(5)},{" "}
-                    {place.longitude.toFixed(5)}
-                  </p>
-                </article>
+                <PlaceCard key={place.id} place={place} />
               ))}
             </div>
           ) : (
             <div className="mt-8 rounded-3xl border border-white/10 bg-[#121936] p-8 text-center text-[#A9B1D6]">
               {placesStatus}
+            </div>
+          )}
+
+          {!isLoadingPlaces && places.length > 0 && (
+            <div className="mt-8 flex items-center justify-between gap-4">
+              <button
+                type="button"
+                disabled={offset === 0}
+                onClick={() => {
+                  setOffset((currentOffset) =>
+                    Math.max(0, currentOffset - limit),
+                  );
+                }}
+                className="min-h-11 rounded-xl border border-white/10 px-5 font-medium text-[#FFF8E7] transition hover:border-[#FF6846]/50 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Previous
+              </button>
+
+              <p className="text-sm text-[#A9B1D6]">
+                Page {Math.floor(offset / limit) + 1}
+              </p>
+
+              <button
+                type="button"
+                disabled={places.length < limit}
+                onClick={() => {
+                  setOffset((currentOffset) => currentOffset + limit);
+                }}
+                className="min-h-11 rounded-xl bg-[#FF6846] px-5 font-semibold text-[#070B24] transition hover:bg-[#FF826B] disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Next
+              </button>
             </div>
           )}
         </div>
