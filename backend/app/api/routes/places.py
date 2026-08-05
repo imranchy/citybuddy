@@ -9,11 +9,42 @@ from app.db.database import get_db
 from app.models.place import Place
 from app.schemas.place import NearbyPlaceRead, PlaceRead
 
+from app.models.place_image import PlaceImage
 
 router = APIRouter(
     prefix="/api/places",
     tags=["places"],
 )
+
+def primary_image_expression():
+    return (
+        select(
+            func.json_build_object(
+                "source",
+                PlaceImage.source,
+                "image_url",
+                PlaceImage.image_url,
+                "thumbnail_url",
+                PlaceImage.thumbnail_url,
+                "source_page_url",
+                PlaceImage.source_page_url,
+                "attribution",
+                PlaceImage.attribution,
+                "license",
+                PlaceImage.license,
+                "license_url",
+                PlaceImage.license_url,
+            )
+        )
+        .where(PlaceImage.place_id == Place.id)
+        .order_by(
+            PlaceImage.is_primary.desc(),
+            PlaceImage.id,
+        )
+        .limit(1)
+        .scalar_subquery()
+        .label("primary_image")
+    )
 
 @router.get("", response_model=list[PlaceRead])
 def list_places(
@@ -40,6 +71,7 @@ def list_places(
         Place.price_level,
         Place.rating,
         Place.dietary_options,
+        primary_image_expression(),
     )
 
     if category:
@@ -145,6 +177,7 @@ def list_nearby_places(
             Place.price_level,
             Place.rating,
             Place.dietary_options,
+            primary_image_expression(),
             distance_km,
         )
         .where(

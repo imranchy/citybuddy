@@ -1,5 +1,14 @@
 from pydantic import BaseModel, Field
 
+class PlaceImageRead(BaseModel):
+    source: str
+    image_url: str
+    thumbnail_url: str | None
+    source_page_url: str
+    attribution: str
+    license: str
+    license_url: str | None
+
 class PlaceRead(BaseModel):
     id: int
     name: str
@@ -13,6 +22,7 @@ class PlaceRead(BaseModel):
     price_level: int | None
     rating: float | None
     dietary_options: list[str] = Field(default_factory=list)
+    primary_image: PlaceImageRead | None = None
 
 class NearbyPlaceRead(PlaceRead):
     distance_km: float
