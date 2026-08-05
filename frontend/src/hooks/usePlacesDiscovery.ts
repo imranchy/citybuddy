@@ -17,7 +17,7 @@ export default function usePlacesDiscovery() {
   const [categories, setCategories] = useState<string[]>([]);
   const [cityInput, setCityInput] = useState("Torino");
   const [city, setCity] = useState("Torino");
-  const [limit, setLimit] = useState(10);
+  const [limit, setLimit] = useState(5);
   const [offset, setOffset] = useState(0);
   const [isLoadingPlaces, setIsLoadingPlaces] = useState(true);
   const [userLocation, setUserLocation] = useState<{
@@ -159,6 +159,7 @@ export default function usePlacesDiscovery() {
     category,
     categories,
     cityInput,
+    city,
     limit,
     offset,
     isLoadingPlaces,

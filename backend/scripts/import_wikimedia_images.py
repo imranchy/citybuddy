@@ -6,6 +6,12 @@ import time
 import httpx
 from sqlalchemy import select
 
+from app.core.cities import CityConfig, get_city
+from app.core.place_catalog import (
+    IMAGE_CATEGORIES,
+    get_category,
+    get_osm_filters,
+)
 from app.db.database import SessionLocal
 from app.models.place import Place
 from app.models.place_image import PlaceImage
@@ -20,15 +26,6 @@ WIKIDATA_API_URL = "https://www.wikidata.org/w/api.php"
 WIKIMEDIA_COMMONS_API_URL = (
     "https://commons.wikimedia.org/w/api.php"
 )
-
-TURIN_BOUNDING_BOX = "44.9580,7.5770,45.1330,7.7730"
-
-SUPPORTED_CATEGORIES = {
-    "museum",
-    "gallery",
-    "attraction",
-    "park",
-}
 
 USER_AGENT = (
     "CityBuddy/0.1 "
@@ -46,30 +43,22 @@ def strip_html(value: str | None) -> str:
     return html.unescape(without_tags).strip()
 
 
-def get_category(tags: dict) -> str | None:
-    """Convert relevant OSM tags into CityBuddy categories."""
-
-    tourism = tags.get("tourism")
-
-    if tourism in {"museum", "gallery", "attraction"}:
-        return tourism
-
-    if tags.get("leisure") == "park":
-        return "park"
-
-    return None
-
-
-def fetch_osm_wikidata_ids() -> dict[str, str]:
+def fetch_osm_wikidata_ids(city: CityConfig) -> dict[str, str]:
     """Map CityBuddy OSM source IDs to explicit Wikidata IDs."""
+
+    selectors = "\n".join(
+        f'nwr{osm_filter}["wikidata"]'
+        f"({city.overpass_bounding_box});"
+        for osm_filter in get_osm_filters(
+            layer="destination",
+            image_eligible_only=True,
+        )
+    )
 
     query = f"""
     [out:json][timeout:120];
     (
-      nwr["tourism"~"^(museum|gallery|attraction)$"]
-         ["wikidata"]({TURIN_BOUNDING_BOX});
-      nwr["leisure"="park"]
-         ["wikidata"]({TURIN_BOUNDING_BOX});
+      {selectors}
     );
     out tags;
     """
@@ -99,7 +88,7 @@ def fetch_osm_wikidata_ids() -> dict[str, str]:
                 wikidata_id = tags.get("wikidata")
 
                 if (
-                    category not in SUPPORTED_CATEGORIES
+                    category not in IMAGE_CATEGORIES
                     or not wikidata_id
                 ):
                     continue
@@ -246,13 +235,14 @@ def fetch_commons_image(
 
 
 def import_images(
+    city: CityConfig,
     *,
     apply_changes: bool,
     limit: int,
 ) -> None:
     """Find reliable Wikimedia images for supported places."""
 
-    osm_wikidata_ids = fetch_osm_wikidata_ids()
+    osm_wikidata_ids = fetch_osm_wikidata_ids(city)
 
     print(
         f"Found {len(osm_wikidata_ids)} OSM places "
@@ -266,8 +256,9 @@ def import_images(
             select(Place)
             .where(
                 Place.source == "osm",
+                Place.city == city.display_name,
                 Place.source_id.in_(osm_wikidata_ids),
-                Place.category.in_(SUPPORTED_CATEGORIES),
+                Place.category.in_(IMAGE_CATEGORIES),
             )
             .order_by(Place.name)
         ).all()
@@ -393,6 +384,12 @@ def parse_arguments() -> argparse.Namespace:
     )
 
     parser.add_argument(
+        "--city",
+        default="turin",
+        help="Configured city key (default: turin).",
+    )
+
+    parser.add_argument(
         "--apply",
         action="store_true",
         help="Save discovered images to the database.",
@@ -411,7 +408,13 @@ def parse_arguments() -> argparse.Namespace:
 if __name__ == "__main__":
     arguments = parse_arguments()
 
+    try:
+        selected_city = get_city(arguments.city)
+    except ValueError as error:
+        raise SystemExit(str(error)) from error
+
     import_images(
+        selected_city,
         apply_changes=arguments.apply,
         limit=max(1, arguments.limit),
     )

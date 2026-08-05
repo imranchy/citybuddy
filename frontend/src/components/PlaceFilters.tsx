@@ -54,8 +54,13 @@ export default function PlaceFilters({
               key={availableCategory}
               value={availableCategory}
             >
-              {availableCategory.charAt(0).toUpperCase() +
-                availableCategory.slice(1)}
+              {availableCategory
+                .split("_")
+                .map(
+                  (word) =>
+                    word.charAt(0).toUpperCase() + word.slice(1),
+                )
+                .join(" ")}
             </option>
           ))}
         </select>
@@ -97,9 +102,9 @@ export default function PlaceFilters({
           }
           className="min-h-12 w-full rounded-xl border border-white/10 bg-[#0B112B] px-4 text-[#FFF8E7] outline-none focus:border-[#FF6846]"
         >
+          <option value={5}>5</option>
           <option value={10}>10</option>
           <option value={20}>20</option>
-          <option value={50}>50</option>
         </select>
       </div>
 

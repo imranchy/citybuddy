@@ -25,6 +25,7 @@ export default function PlacesSection() {
     category,
     categories,
     cityInput,
+    city,
     limit,
     offset,
     isLoadingPlaces,
@@ -59,7 +60,7 @@ export default function PlacesSection() {
               id="places-heading"
               className="mt-3 text-3xl font-bold tracking-tight sm:text-4xl"
             >
-              Places in Turin
+              Places in {city || "your city"}
             </h2>
           </div>
 
@@ -94,7 +95,7 @@ export default function PlacesSection() {
             setCategory("");
             setCityInput("Torino");
             setCity("Torino");
-            setLimit(10);
+            setLimit(5);
             setOffset(0);
           }}
         />

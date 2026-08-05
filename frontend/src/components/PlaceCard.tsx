@@ -14,9 +14,16 @@ const categorySymbols: Record<string, string> = {
   bar: "◆",
   cafe: "☕",
   gallery: "▣",
+  hostel: "⌂",
+  hotel: "◆",
+  library: "▤",
+  market: "◇",
   museum: "⌂",
   park: "♧",
   restaurant: "●",
+  theatre: "◐",
+  tourist_information: "i",
+  viewpoint: "⌖",
 };
 
 export default function PlaceCard({ place }: PlaceCardProps) {

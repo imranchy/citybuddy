@@ -1,8 +1,22 @@
-import httpx
+import_osm_places.py
+
+
+import argparse
 import time
+from collections import Counter
+
+import httpx
 from geoalchemy2.elements import WKTElement
 from sqlalchemy import select
 
+from app.core.cities import CityConfig, get_city
+from app.core.place_catalog import (
+    DESTINATION_CATEGORIES,
+    TRANSPORT_CATEGORIES,
+    PlaceLayer,
+    get_category,
+    get_osm_filters,
+)
 from app.db.database import SessionLocal
 from app.models.place import Place
 
@@ -12,15 +26,9 @@ OVERPASS_URLS = (
     "https://overpass.kumi.systems/api/interpreter",
 )
 
-# South, west, north, east boundaries covering Turin.
-TURIN_BOUNDING_BOX = "44.9580,7.5770,45.1330,7.7730"
-
-OSM_FILTERS = (
-    '["amenity"="restaurant"]["name"]',
-    '["amenity"="cafe"]["name"]',
-    '["amenity"="bar"]["name"]',
-    '["tourism"~"^(museum|attraction|gallery)$"]["name"]',
-    '["leisure"="park"]["name"]',
+USER_AGENT = (
+    "CityBuddy/0.1 "
+    "(https://github.com/imranchy/citybuddy)"
 )
 
 
@@ -38,26 +46,21 @@ def get_coordinates(element: dict) -> tuple[float, float] | None:
     return None
 
 
-def get_category(tags: dict) -> str | None:
-    """Convert OpenStreetMap tags into CityBuddy categories."""
+def get_localized_tag(
+    tags: dict[str, str],
+    key: str,
+    city: CityConfig,
+) -> str | None:
+    """Prefer local-language OSM content, then the generic value."""
 
-    amenity = tags.get("amenity")
-
-    if amenity in {"restaurant", "cafe", "bar"}:
-        return amenity
-
-    tourism = tags.get("tourism")
-
-    if tourism in {"museum", "attraction", "gallery"}:
-        return tourism
-
-    if tags.get("leisure") == "park":
-        return "park"
-
-    return None
+    return (
+        tags.get(f"{key}:{city.default_language}")
+        or tags.get(key)
+        or tags.get(f"{key}:en")
+    )
 
 
-def get_address(tags: dict) -> str:
+def get_address(tags: dict[str, str]) -> str:
     """Construct a readable address from available OSM tags."""
 
     if tags.get("addr:full"):
@@ -75,11 +78,16 @@ def get_address(tags: dict) -> str:
     return "Address unavailable"
 
 
-def get_description(tags: dict) -> str | None:
-    """Create a basic description from OSM metadata."""
+def get_description(
+    tags: dict[str, str],
+    city: CityConfig,
+) -> str | None:
+    """Create a description from local OSM metadata when available."""
 
-    if tags.get("description"):
-        return tags["description"]
+    description = get_localized_tag(tags, "description", city)
+
+    if description:
+        return description
 
     cuisine = tags.get("cuisine")
 
@@ -90,10 +98,8 @@ def get_description(tags: dict) -> str | None:
     return None
 
 
-def get_dietary_options(tags: dict) -> list[str]:
+def get_dietary_options(tags: dict[str, str]) -> list[str]:
     """Extract known dietary information from OSM tags."""
-
-    dietary_options = []
 
     dietary_tags = {
         "diet:vegetarian": "vegetarian",
@@ -102,22 +108,34 @@ def get_dietary_options(tags: dict) -> list[str]:
         "diet:gluten_free": "gluten_free",
     }
 
-    for osm_tag, citybuddy_value in dietary_tags.items():
-        if tags.get(osm_tag) in {"yes", "only"}:
-            dietary_options.append(citybuddy_value)
+    return [
+        citybuddy_value
+        for osm_tag, citybuddy_value in dietary_tags.items()
+        if tags.get(osm_tag) in {"yes", "only"}
+    ]
 
-    return dietary_options
 
+def fetch_osm_places(
+    city: CityConfig,
+    *,
+    layer: PlaceLayer,
+    category: str | None,
+) -> list[dict]:
+    """Download configured places using small, retried Overpass queries."""
 
-def fetch_osm_places() -> list[dict]:
-    """Download Turin places using small, retried Overpass queries."""
+    osm_filters = get_osm_filters(layer=layer, category=category)
+
+    if not osm_filters:
+        raise ValueError(
+            f"Category '{category}' is not part of the {layer} layer."
+        )
 
     collected_elements: dict[str, dict] = {}
 
-    for osm_filter in OSM_FILTERS:
+    for osm_filter in osm_filters:
         query = f"""
         [out:json][timeout:60];
-        nwr{osm_filter}({TURIN_BOUNDING_BOX});
+        nwr{osm_filter}({city.overpass_bounding_box});
         out center tags;
         """
 
@@ -130,30 +148,21 @@ def fetch_osm_places() -> list[dict]:
                 response = httpx.post(
                     overpass_url,
                     data={"data": query},
-                    headers={
-                        "User-Agent": "CityBuddy/0.1 development project",
-                    },
+                    headers={"User-Agent": USER_AGENT},
                     timeout=120,
                 )
-
                 response.raise_for_status()
                 elements = response.json().get("elements", [])
 
                 for element in elements:
-                    element_key = (
-                        f"{element['type']}/{element['id']}"
-                    )
+                    element_key = f"{element['type']}/{element['id']}"
                     collected_elements[element_key] = element
 
                 print(f"Received {len(elements)} elements.")
-                # Be respectful of shared public Overpass servers.
-                time.sleep(10)
+                time.sleep(5)
                 break
 
-            except (
-                httpx.HTTPError,
-                ValueError,
-            ) as error:
+            except (httpx.HTTPError, ValueError) as error:
                 last_error = error
                 print(f"Request failed: {error}")
                 time.sleep(2)
@@ -161,21 +170,71 @@ def fetch_osm_places() -> list[dict]:
         else:
             print(
                 "Warning: all Overpass servers failed for "
-                f"{osm_filter}. This category will be skipped "
-                "during this run."
+                f"{osm_filter}; that source filter was skipped."
             )
             print(f"Last error: {last_error}")
+
     return list(collected_elements.values())
 
 
-def import_places() -> None:
-    """Import new OSM places while avoiding duplicate records."""
+def print_counts(title: str, counts: Counter[str]) -> None:
+    print(title)
 
-    print("Downloading Turin places from OpenStreetMap...")
+    if not counts:
+        print("  none")
+        return
 
-    elements = fetch_osm_places()
+    for category, count in sorted(counts.items()):
+        print(f"  {category}: {count}")
 
-    print(f"Received {len(elements)} OpenStreetMap elements.")
+
+def import_places(
+    city: CityConfig,
+    *,
+    layer: PlaceLayer,
+    category: str | None,
+    apply_changes: bool,
+    limit: int | None,
+) -> None:
+    """Preview or import OSM places while avoiding duplicate records."""
+
+    print(
+        f"Downloading {layer} data for {city.display_name}, "
+        f"{city.country_code}..."
+    )
+
+    elements = fetch_osm_places(city, layer=layer, category=category)
+    fetched_counts: Counter[str] = Counter()
+    valid_elements: list[tuple[dict, str, str, float, float]] = []
+    incomplete_count = 0
+    out_of_scope_count = 0
+
+    for element in elements:
+        tags = element.get("tags", {})
+        name = get_localized_tag(tags, "name", city)
+        normalized_category = get_category(tags)
+        coordinates = get_coordinates(element)
+
+        if not name or not normalized_category or not coordinates:
+            incomplete_count += 1
+            continue
+
+        if category and normalized_category != category:
+            out_of_scope_count += 1
+            continue
+
+        longitude, latitude = coordinates
+
+        if longitude is None or latitude is None:
+            incomplete_count += 1
+            continue
+
+        fetched_counts[normalized_category] += 1
+        valid_elements.append(
+            (element, name, normalized_category, longitude, latitude)
+        )
+
+    print_counts("Valid records returned by OSM:", fetched_counts)
 
     database = SessionLocal()
 
@@ -186,57 +245,83 @@ def import_places() -> None:
             ).all()
         )
 
-        imported_count = 0
-        skipped_count = 0
+        all_candidates = [
+            item
+            for item in valid_elements
+            if f"{item[0]['type']}/{item[0]['id']}"
+            not in existing_source_ids
+        ]
 
-        for element in elements:
-            tags = element.get("tags", {})
-            name = tags.get("name")
-            category = get_category(tags)
-            coordinates = get_coordinates(element)
+        existing_count = len(valid_elements) - len(all_candidates)
+        candidates = all_candidates
 
-            if not name or not category or not coordinates:
-                skipped_count += 1
-                continue
+        if limit is not None:
+            candidates = candidates[:limit]
 
-            longitude, latitude = coordinates
+        candidate_counts = Counter(item[2] for item in candidates)
+        print_counts("New records eligible for this run:", candidate_counts)
 
-            if longitude is None or latitude is None:
-                skipped_count += 1
-                continue
+        for _, name, normalized_category, _, _ in candidates[:20]:
+            print(f"  PREVIEW {normalized_category}: {name}")
 
-            source_id = f"{element['type']}/{element['id']}"
+        if len(candidates) > 20:
+            print(f"  ...and {len(candidates) - 20} more")
 
-            if source_id in existing_source_ids:
-                skipped_count += 1
-                continue
-
-            place = Place(
-                source="osm",
-                source_id=source_id,
-                name=name,
-                category=category,
-                description=get_description(tags),
-                address=get_address(tags),
-                city="Torino",
-                country_code="IT",
-                location=WKTElement(
-                    f"POINT({longitude} {latitude})",
-                    srid=4326,
-                ),
-                price_level=None,
-                rating=None,
-                dietary_options=get_dietary_options(tags),
+        if limit is not None and len(all_candidates) > len(candidates):
+            print(
+                "New records deferred by this run's limit: "
+                f"{len(all_candidates) - len(candidates)}"
             )
 
-            database.add(place)
-            existing_source_ids.add(source_id)
-            imported_count += 1
+        if not apply_changes:
+            database.rollback()
+            print("Preview complete. No database changes were made.")
+            print(f"Incomplete records skipped: {incomplete_count}")
+            print(f"Out-of-scope records skipped: {out_of_scope_count}")
+            return
+
+        for (
+            element,
+            name,
+            normalized_category,
+            longitude,
+            latitude,
+        ) in candidates:
+            tags = element.get("tags", {})
+            source_id = f"{element['type']}/{element['id']}"
+
+            database.add(
+                Place(
+                    source="osm",
+                    source_id=source_id,
+                    name=name,
+                    category=normalized_category,
+                    description=get_description(tags, city),
+                    address=get_address(tags),
+                    city=city.display_name,
+                    country_code=city.country_code,
+                    location=WKTElement(
+                        f"POINT({longitude} {latitude})",
+                        srid=4326,
+                    ),
+                    price_level=None,
+                    rating=None,
+                    dietary_options=get_dietary_options(tags),
+                )
+            )
 
         database.commit()
+        print(f"Imported {len(candidates)} new places.")
+        print(f"Existing records skipped: {existing_count}")
 
-        print(f"Imported {imported_count} new places.")
-        print(f"Skipped {skipped_count} existing or incomplete places.")
+        print(f"Incomplete records skipped: {incomplete_count}")
+        print(f"Out-of-scope records skipped: {out_of_scope_count}")
+
+        if layer == "transport":
+            print(
+                "Transport records are stored for the future transport "
+                "layer and are excluded from destination endpoints."
+            )
 
     except Exception:
         database.rollback()
@@ -246,5 +331,67 @@ def import_places() -> None:
         database.close()
 
 
+def parse_arguments() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Preview or import configured OSM data for CityBuddy."
+    )
+    parser.add_argument(
+        "--city",
+        default="turin",
+        help="Configured city key (default: turin).",
+    )
+    parser.add_argument(
+        "--layer",
+        choices=("destination", "transport"),
+        default="destination",
+        help="Data layer to ingest (default: destination).",
+    )
+    parser.add_argument(
+        "--category",
+        help="Optionally restrict ingestion to one normalized category.",
+    )
+    parser.add_argument(
+        "--limit",
+        type=int,
+        help="Maximum number of new records to preview or import.",
+    )
+    parser.add_argument(
+        "--apply",
+        action="store_true",
+        help="Save the previewed records to the database.",
+    )
+    return parser.parse_args()
+
+
 if __name__ == "__main__":
-    import_places()
+    arguments = parse_arguments()
+
+    try:
+        selected_city = get_city(arguments.city)
+    except ValueError as error:
+        raise SystemExit(str(error)) from error
+
+    allowed_categories = (
+        DESTINATION_CATEGORIES
+        if arguments.layer == "destination"
+        else TRANSPORT_CATEGORIES
+    )
+
+    if arguments.category and arguments.category not in allowed_categories:
+        available = ", ".join(sorted(allowed_categories))
+        raise SystemExit(
+            f"Invalid {arguments.layer} category '{arguments.category}'. "
+            f"Available categories: {available}."
+        )
+
+    import_places(
+        selected_city,
+        layer=arguments.layer,
+        category=arguments.category,
+        apply_changes=arguments.apply,
+        limit=(
+            max(1, arguments.limit)
+            if arguments.limit is not None
+            else None
+        ),
+    )

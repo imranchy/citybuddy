@@ -5,16 +5,19 @@ from geoalchemy2 import Geography, Geometry
 from sqlalchemy import cast, func, select
 from sqlalchemy.orm import Session
 
+from app.core.place_catalog import DESTINATION_CATEGORIES
 from app.db.database import get_db
 from app.models.place import Place
 from app.schemas.place import NearbyPlaceRead, PlaceRead
 
 from app.models.place_image import PlaceImage
 
+
 router = APIRouter(
     prefix="/api/places",
     tags=["places"],
 )
+
 
 def primary_image_expression():
     return (
@@ -46,12 +49,13 @@ def primary_image_expression():
         .label("primary_image")
     )
 
+
 @router.get("", response_model=list[PlaceRead])
 def list_places(
     database: Annotated[Session, Depends(get_db)],
     category: str | None = None,
     city: str | None = None,
-    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    limit: Annotated[int, Query(ge=1, le=200)] = 5,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[PlaceRead]:
     statement = select(
@@ -72,7 +76,7 @@ def list_places(
         Place.rating,
         Place.dietary_options,
         primary_image_expression(),
-    )
+    ).where(Place.category.in_(DESTINATION_CATEGORIES))
 
     if category:
         statement = statement.where(
@@ -98,6 +102,7 @@ def list_places(
         for place in places
     ]
 
+
 @router.get(
     "/categories",
     response_model=list[str],
@@ -107,7 +112,7 @@ def list_place_categories(
 ) -> list[str]:
     statement = (
         select(Place.category)
-        .where(Place.category.is_not(None))
+        .where(Place.category.in_(DESTINATION_CATEGORIES))
         .distinct()
         .order_by(Place.category)
     )
@@ -115,6 +120,7 @@ def list_place_categories(
     categories = database.scalars(statement).all()
 
     return list(categories)
+
 
 @router.get(
     "/nearby",
@@ -138,7 +144,7 @@ def list_nearby_places(
     limit: Annotated[
         int,
         Query(ge=1, le=200),
-    ] = 50,
+    ] = 5,
 ) -> list[NearbyPlaceRead]:
     user_location = cast(
         func.ST_SetSRID(
@@ -185,7 +191,8 @@ def list_nearby_places(
                 Place.location,
                 user_location,
                 radius_km * 1000,
-            )
+            ),
+            Place.category.in_(DESTINATION_CATEGORIES),
         )
     )
 
