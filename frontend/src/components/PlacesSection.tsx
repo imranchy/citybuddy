@@ -4,6 +4,19 @@ import LocationControls from "@/components/LocationControls";
 import PlaceCard from "@/components/PlaceCard";
 import PlaceFilters from "@/components/PlaceFilters";
 import usePlacesDiscovery from "@/hooks/usePlacesDiscovery";
+import dynamic from "next/dynamic";
+
+const PlaceMap = dynamic(
+  () => import("@/components/PlaceMap"),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="mt-8 flex h-[28rem] items-center justify-center rounded-3xl border border-white/10 bg-[#121936] text-[#A9B1D6]">
+        Loading map...
+      </div>
+    ),
+  },
+);
 
 export default function PlacesSection() {
   const {
@@ -107,6 +120,13 @@ export default function PlacesSection() {
             setOffset(0);
           }}
         />
+
+        {places.length > 0 && (
+        <PlaceMap
+          places={places}
+          userLocation={userLocation}
+        />
+      )}
 
         {isLoadingPlaces ? (
           <div className="mt-8 rounded-3xl border border-white/10 bg-[#121936] p-8 text-center text-[#A9B1D6]">
