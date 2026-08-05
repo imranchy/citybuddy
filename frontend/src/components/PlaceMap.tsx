@@ -5,6 +5,11 @@ import { useEffect, useRef } from "react";
 
 import type { Place } from "@/types/place";
 
+import {
+  getGoogleDirectionsUrl,
+  getGoogleMapsUrl,
+} from "@/lib/maps";
+
 type UserLocation = {
   latitude: number;
   longitude: number;
@@ -46,6 +51,31 @@ function createPlacePopup(place: Place): HTMLElement {
     distance.style.fontWeight = "600";
     container.appendChild(distance);
   }
+
+    const actions = document.createElement("div");
+    actions.style.display = "flex";
+    actions.style.gap = "8px";
+    actions.style.marginTop = "10px";
+
+    const mapsLink = document.createElement("a");
+    mapsLink.href = getGoogleMapsUrl(place);
+    mapsLink.target = "_blank";
+    mapsLink.rel = "noopener noreferrer";
+    mapsLink.textContent = "View on Google Maps";
+    mapsLink.style.color = "#D94E31";
+    mapsLink.style.fontWeight = "600";
+
+    const directionsLink = document.createElement("a");
+    directionsLink.href = getGoogleDirectionsUrl(place);
+    directionsLink.target = "_blank";
+    directionsLink.rel = "noopener noreferrer";
+    directionsLink.textContent = "Directions";
+    directionsLink.style.color = "#D94E31";
+    directionsLink.style.fontWeight = "600";
+
+    actions.appendChild(mapsLink);
+    actions.appendChild(directionsLink);
+    container.appendChild(actions);
 
   return container;
 }
