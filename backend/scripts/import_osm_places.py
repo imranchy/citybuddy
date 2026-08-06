@@ -185,6 +185,74 @@ def print_counts(title: str, counts: Counter[str]) -> None:
         print(f"  {category}: {count}")
 
 
+def filter_candidates_by_source_ids(
+    candidates: list[tuple[dict, str, str, float, float]],
+    source_ids: frozenset[str] | None,
+) -> list[tuple[dict, str, str, float, float]]:
+    """Keep only candidates with explicitly approved OSM source IDs."""
+
+    if source_ids is None:
+        return candidates
+
+    return [
+        item
+        for item in candidates
+        if f"{item[0]['type']}/{item[0]['id']}" in source_ids
+    ]
+
+
+def get_lifecycle_tags(tags: dict[str, str]) -> list[str]:
+    """Return OSM lifecycle tags that may indicate inactive features."""
+
+    lifecycle_prefixes = (
+        "abandoned",
+        "construction",
+        "demolished",
+        "disused",
+        "proposed",
+        "razed",
+    )
+
+    return sorted(
+        f"{key}={value}"
+        for key, value in tags.items()
+        if key in lifecycle_prefixes
+        or key.startswith(
+            tuple(f"{prefix}:" for prefix in lifecycle_prefixes)
+        )
+    )
+
+
+def print_candidate_details(
+    candidate: tuple[dict, str, str, float, float],
+) -> None:
+    """Print evidence needed for human review of an OSM candidate."""
+
+    element, name, normalized_category, longitude, latitude = candidate
+    tags = element.get("tags", {})
+    source_id = f"{element['type']}/{element['id']}"
+    lifecycle_tags = get_lifecycle_tags(tags)
+
+    print()
+    print(f"  PREVIEW {normalized_category}: {name}")
+    print(f"    Source ID: {source_id}")
+    print(f"    Coordinates: {latitude:.6f}, {longitude:.6f}")
+    print(f"    Address: {get_address(tags)}")
+    print(f"    Operator: {tags.get('operator', 'Not provided')}")
+    print(
+        "    Opening hours: "
+        f"{tags.get('opening_hours', 'Not provided')}"
+    )
+    print(
+        "    Website: "
+        f"{tags.get('website') or tags.get('contact:website') or 'Not provided'}"
+    )
+    print(
+        "    Lifecycle tags: "
+        f"{', '.join(lifecycle_tags) if lifecycle_tags else 'None declared'}"
+    )
+
+
 def import_places(
     city: CityConfig,
     *,
@@ -192,6 +260,8 @@ def import_places(
     category: str | None,
     apply_changes: bool,
     limit: int | None,
+    source_ids: frozenset[str] | None = None,
+    show_details: bool = False,
 ) -> None:
     """Preview or import OSM places while avoiding duplicate records."""
 
@@ -250,6 +320,18 @@ def import_places(
         ]
 
         existing_count = len(valid_elements) - len(all_candidates)
+        approval_excluded_count = 0
+
+        if source_ids is not None:
+            approved_candidates = filter_candidates_by_source_ids(
+                all_candidates,
+                source_ids,
+            )
+            approval_excluded_count = (
+                len(all_candidates) - len(approved_candidates)
+            )
+            all_candidates = approved_candidates
+
         candidates = all_candidates
 
         if limit is not None:
@@ -258,11 +340,21 @@ def import_places(
         candidate_counts = Counter(item[2] for item in candidates)
         print_counts("New records eligible for this run:", candidate_counts)
 
-        for _, name, normalized_category, _, _ in candidates[:20]:
-            print(f"  PREVIEW {normalized_category}: {name}")
+        if source_ids is not None:
+            print(
+                "New records excluded by source-ID allowlist: "
+                f"{approval_excluded_count}"
+            )
 
-        if len(candidates) > 20:
-            print(f"  ...and {len(candidates) - 20} more")
+        if show_details:
+            for candidate in candidates:
+                print_candidate_details(candidate)
+        else:
+            for _, name, normalized_category, _, _ in candidates[:20]:
+                print(f"  PREVIEW {normalized_category}: {name}")
+
+            if len(candidates) > 20:
+                print(f"  ...and {len(candidates) - 20} more")
 
         if limit is not None and len(all_candidates) > len(candidates):
             print(
@@ -328,6 +420,26 @@ def import_places(
         database.close()
 
 
+def parse_osm_source_id(value: str) -> str:
+    """Validate and normalize an OSM element source ID."""
+
+    normalized_value = value.strip().lower()
+    parts = normalized_value.split("/", maxsplit=1)
+
+    if (
+        len(parts) != 2
+        or parts[0] not in {"node", "way", "relation"}
+        or not parts[1].isdigit()
+        or int(parts[1]) < 1
+    ):
+        raise argparse.ArgumentTypeError(
+            "OSM source IDs must look like node/123, "
+            "way/123, or relation/123."
+        )
+
+    return normalized_value
+
+
 def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Preview or import configured OSM data for CityBuddy."
@@ -346,6 +458,23 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument(
         "--category",
         help="Optionally restrict ingestion to one normalized category.",
+    )
+    parser.add_argument(
+        "--source-id",
+        dest="source_ids",
+        action="append",
+        type=parse_osm_source_id,
+        help=(
+            "Only process an explicitly approved OSM source ID. "
+            "Repeat this option to approve multiple IDs."
+        ),
+    )
+    parser.add_argument(
+        "--show-details",
+        action="store_true",
+        help=(
+            "Show source IDs and review metadata for every candidate."
+        ),
     )
     parser.add_argument(
         "--limit",
@@ -391,4 +520,10 @@ if __name__ == "__main__":
             if arguments.limit is not None
             else None
         ),
+        source_ids=(
+            frozenset(arguments.source_ids)
+            if arguments.source_ids
+            else None
+        ),
+        show_details=arguments.show_details,
     )

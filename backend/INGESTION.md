@@ -29,6 +29,12 @@ Use `--limit 20` during small validation runs. The importer reports records
 returned per category, new candidates, existing records, incomplete records,
 and records deferred by the limit.
 
+Inspect detailed OSM metadata before approving ambiguous categories:
+
+```cmd
+python -m scripts.import_osm_places --city turin --category market --show-details
+```
+
 ## Transport ingestion
 
 Preview transport separately:
