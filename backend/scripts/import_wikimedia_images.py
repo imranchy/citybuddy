@@ -234,15 +234,37 @@ def fetch_commons_image(
     }
 
 
+def filter_wikidata_mappings(
+    mappings: dict[str, str],
+    requested_ids: frozenset[str] | None,
+) -> dict[str, str]:
+    """Keep only explicitly approved Wikidata mappings."""
+
+    if requested_ids is None:
+        return mappings
+
+    return {
+        source_id: wikidata_id
+        for source_id, wikidata_id in mappings.items()
+        if wikidata_id in requested_ids
+    }
+
+
 def import_images(
     city: CityConfig,
     *,
     apply_changes: bool,
     limit: int,
+    wikidata_ids: frozenset[str] | None = None,
 ) -> None:
     """Find reliable Wikimedia images for supported places."""
 
     osm_wikidata_ids = fetch_osm_wikidata_ids(city)
+
+    osm_wikidata_ids = filter_wikidata_mappings(
+        osm_wikidata_ids,
+        wikidata_ids,
+    )
 
     print(
         f"Found {len(osm_wikidata_ids)} OSM places "
@@ -375,6 +397,19 @@ def import_images(
         database.close()
 
 
+def parse_wikidata_id(value: str) -> str:
+    """Validate and normalize a Wikidata entity ID."""
+
+    normalized_value = value.strip().upper()
+
+    if not re.fullmatch(r"Q[1-9]\d*", normalized_value):
+        raise argparse.ArgumentTypeError(
+            "Wikidata IDs must look like Q12345."
+        )
+
+    return normalized_value
+
+
 def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
@@ -393,6 +428,17 @@ def parse_arguments() -> argparse.Namespace:
         "--apply",
         action="store_true",
         help="Save discovered images to the database.",
+    )
+
+    parser.add_argument(
+        "--wikidata-id",
+        dest="wikidata_ids",
+        action="append",
+        type=parse_wikidata_id,
+        help=(
+            "Only process an explicitly approved Wikidata ID. "
+            "Repeat this option to approve multiple IDs."
+        ),
     )
 
     parser.add_argument(
@@ -417,4 +463,9 @@ if __name__ == "__main__":
         selected_city,
         apply_changes=arguments.apply,
         limit=max(1, arguments.limit),
+        wikidata_ids=(
+            frozenset(arguments.wikidata_ids)
+            if arguments.wikidata_ids
+            else None
+        ),
     )

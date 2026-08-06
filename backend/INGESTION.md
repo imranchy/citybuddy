@@ -49,11 +49,30 @@ Preview images for a configured city:
 python -m scripts.import_wikimedia_images --city turin --limit 10
 ```
 
-Apply only after manually reviewing the matches:
+Apply a reviewed preview:
 
 ```cmd
 python -m scripts.import_wikimedia_images --city turin --limit 10 --apply
 ```
+
+For safer human-reviewed imports, explicitly select approved Wikidata matches
+by repeating `--wikidata-id` for each reviewed entity.
+
+Preview an approved allowlist without writing records:
+
+```cmd
+python -m scripts.import_wikimedia_images --city turin --wikidata-id Q3902364 --wikidata-id Q975240
+```
+
+Apply the same approved allowlist only after verifying its preview:
+
+```cmd
+python -m scripts.import_wikimedia_images --city turin --wikidata-id Q3902364 --wikidata-id Q975240 --apply
+```
+
+When one or more `--wikidata-id` options are supplied, all other Wikidata
+mappings are excluded from both preview and import. Always preview the exact
+same allowlist without `--apply` before writing image records.
 
 ## Duplicate report
 
@@ -74,7 +93,7 @@ The report never modifies the database.
 ## Adding a city
 
 Add a `CityConfig` entry to `app/core/cities.py` with its key, display name,
-country code, bounding box, default language and supported languages. Always
+country code, bounding box, default language, and supported languages. Always
 preview category counts before applying an import for a new city.
 
 ## Adding a category
