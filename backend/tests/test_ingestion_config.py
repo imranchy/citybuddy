@@ -44,6 +44,35 @@ class PlaceCatalogTests(unittest.TestCase):
             }.issubset(DESTINATION_CATEGORIES)
         )
 
+    def test_tourist_information_requires_office_subtype(self) -> None:
+        self.assertEqual(
+            get_category(
+                {
+                    "tourism": "information",
+                    "information": "office",
+                }
+            ),
+            "tourist_information",
+        )
+        self.assertIsNone(
+            get_category(
+                {
+                    "tourism": "information",
+                    "information": "board",
+                }
+            )
+        )
+        self.assertEqual(
+            get_osm_filters(
+                layer="destination",
+                category="tourist_information",
+            ),
+            (
+                '["tourism"="information"]'
+                '["information"="office"]["name"]',
+            ),
+        )
+
     def test_transport_tags_are_normalized(self) -> None:
         self.assertEqual(
             get_category(

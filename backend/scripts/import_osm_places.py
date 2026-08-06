@@ -1,6 +1,3 @@
-import_osm_places.py
-
-
 import argparse
 import time
 from collections import Counter

@@ -94,7 +94,7 @@ CATEGORY_DEFINITIONS: tuple[CategoryDefinition, ...] = (
     CategoryDefinition(
         "tourist_information",
         "destination",
-        ('["tourism"="information"]["name"]',),
+        ('["tourism"="information"]["information"="office"]["name"]',),
     ),
     CategoryDefinition(
         "train_station",
@@ -173,7 +173,7 @@ def get_category(tags: dict[str, str]) -> str | None:
     }:
         return tourism
 
-    if tourism == "information":
+    if tourism == "information" and tags.get("information") == "office":
         return "tourist_information"
 
     amenity = tags.get("amenity")
