@@ -4,7 +4,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.db.database import engine
-
+from app.api.routes.transport import router as transport_router
 from app.api.routes.places import router as places_router
 
 
@@ -23,6 +23,7 @@ app.add_middleware(
 )
 
 app.include_router(places_router)
+app.include_router(transport_router)
 
 
 @app.get("/api/health")
