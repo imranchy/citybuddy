@@ -4,9 +4,10 @@ import unittest
 from scripts.import_osm_places import (
     filter_candidates_by_source_ids,
     get_lifecycle_tags,
+    get_operational_metadata,
     parse_osm_source_id,
+    validate_refresh_request,
 )
-
 
 class OsmSourceSelectionTests(unittest.TestCase):
     def test_filter_keeps_only_requested_source_ids(self) -> None:
@@ -34,6 +35,20 @@ class OsmSourceSelectionTests(unittest.TestCase):
 
         self.assertEqual(filtered, [candidates[1]])
 
+    def test_refresh_requires_source_allowlist(self) -> None:
+        with self.assertRaisesRegex(
+            ValueError,
+            "requires at least one --source-id",
+        ):
+            validate_refresh_request(True, None)
+
+        validate_refresh_request(
+            True,
+            frozenset({"node/100"}),
+        )
+        validate_refresh_request(False, None)
+
+
     def test_lifecycle_tags_are_reported(self) -> None:
         tags = {
             "name": "Former market",
@@ -48,6 +63,24 @@ class OsmSourceSelectionTests(unittest.TestCase):
                 "abandoned=yes",
                 "disused:amenity=marketplace",
             ],
+        )
+
+    def test_operational_metadata_uses_contact_website_fallback(
+        self,
+    ) -> None:
+        tags = {
+            "opening_hours": "Mo-Sa 08:00-14:00",
+            "contact:website": "https://example.com/market",
+            "operator": "Comune di Torino",
+        }
+
+        self.assertEqual(
+            get_operational_metadata(tags),
+            {
+                "opening_hours": "Mo-Sa 08:00-14:00",
+                "website": "https://example.com/market",
+                "operator": "Comune di Torino",
+            },
         )
 
     def test_no_allowlist_preserves_all_candidates(self) -> None:

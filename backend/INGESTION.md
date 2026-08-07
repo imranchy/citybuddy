@@ -35,6 +35,25 @@ Inspect detailed OSM metadata before approving ambiguous categories:
 python -m scripts.import_osm_places --city turin --category market --show-details
 ```
 
+Use `--source-id` to restrict a preview or import to explicitly reviewed OSM
+elements. Repeat the option when approving multiple records.
+
+Preview operational metadata refreshes for existing records:
+
+```cmd
+python -m scripts.import_osm_places --city turin --category market --source-id node/1314042685 --source-id way/25568763 --refresh-existing --show-details
+```
+
+Apply only after reviewing the exact same command without `--apply`:
+
+```cmd
+python -m scripts.import_osm_places --city turin --category market --source-id node/1314042685 --source-id way/25568763 --refresh-existing --show-details --apply
+```
+
+`--refresh-existing` updates only `opening_hours`, `website`, and `operator`.
+It requires at least one explicitly approved `--source-id`. Preview mode never
+writes database changes.
+
 ## Transport ingestion
 
 Preview transport separately:

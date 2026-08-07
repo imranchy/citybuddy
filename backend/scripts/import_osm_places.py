@@ -112,6 +112,21 @@ def get_dietary_options(tags: dict[str, str]) -> list[str]:
     ]
 
 
+def get_operational_metadata(
+    tags: dict[str, str],
+) -> dict[str, str | None]:
+    """Extract operational place metadata from OSM tags."""
+
+    return {
+        "opening_hours": tags.get("opening_hours"),
+        "website": (
+            tags.get("website")
+            or tags.get("contact:website")
+        ),
+        "operator": tags.get("operator"),
+    }
+
+
 def fetch_osm_places(
     city: CityConfig,
     *,
@@ -252,6 +267,16 @@ def print_candidate_details(
         f"{', '.join(lifecycle_tags) if lifecycle_tags else 'None declared'}"
     )
 
+def validate_refresh_request(
+    refresh_existing: bool,
+    source_ids: frozenset[str] | None,
+) -> None:
+    """Require an explicit source allowlist for existing-record refreshes."""
+
+    if refresh_existing and source_ids is None:
+        raise ValueError(
+            "--refresh-existing requires at least one --source-id."
+        )
 
 def import_places(
     city: CityConfig,
@@ -262,9 +287,10 @@ def import_places(
     limit: int | None,
     source_ids: frozenset[str] | None = None,
     show_details: bool = False,
+    refresh_existing: bool = False,
 ) -> None:
     """Preview or import OSM places while avoiding duplicate records."""
-
+    validate_refresh_request(refresh_existing, source_ids)
     print(
         f"Downloading {layer} data for {city.display_name}, "
         f"{city.country_code}..."
@@ -306,11 +332,13 @@ def import_places(
     database = SessionLocal()
 
     try:
-        existing_source_ids = set(
-            database.scalars(
-                select(Place.source_id).where(Place.source == "osm")
+        existing_places_by_source_id = {
+            place.source_id: place
+            for place in database.scalars(
+                select(Place).where(Place.source == "osm")
             ).all()
-        )
+        }
+        existing_source_ids = set(existing_places_by_source_id)
 
         all_candidates = [
             item
@@ -321,6 +349,9 @@ def import_places(
 
         existing_count = len(valid_elements) - len(all_candidates)
         approval_excluded_count = 0
+        refresh_candidates: list[
+            tuple[dict, str, str, float, float]
+        ] = []
 
         if source_ids is not None:
             approved_candidates = filter_candidates_by_source_ids(
@@ -331,6 +362,19 @@ def import_places(
                 len(all_candidates) - len(approved_candidates)
             )
             all_candidates = approved_candidates
+
+        if refresh_existing:
+            refresh_candidates = [
+                item
+                for item in filter_candidates_by_source_ids(
+                    valid_elements,
+                    source_ids,
+                )
+                if (
+                    f"{item[0]['type']}/{item[0]['id']}"
+                    in existing_source_ids
+                )
+            ]
 
         candidates = all_candidates
 
@@ -356,6 +400,22 @@ def import_places(
             if len(candidates) > 20:
                 print(f"  ...and {len(candidates) - 20} more")
 
+        if refresh_existing:
+            refresh_counts = Counter(
+                item[2] for item in refresh_candidates
+            )
+            print_counts(
+                "Existing records eligible for metadata refresh:",
+                refresh_counts,
+            )
+
+            for candidate in refresh_candidates:
+                if show_details:
+                    print_candidate_details(candidate)
+                else:
+                    _, name, normalized_category, _, _ = candidate
+                    print(f"  REFRESH {normalized_category}: {name}")
+
         if limit is not None and len(all_candidates) > len(candidates):
             print(
                 "New records deferred by this run's limit: "
@@ -368,6 +428,17 @@ def import_places(
             print(f"Incomplete records skipped: {incomplete_count}")
             print(f"Out-of-scope records skipped: {out_of_scope_count}")
             return
+
+        for element, _, _, _, _ in refresh_candidates:
+            source_id = f"{element['type']}/{element['id']}"
+            existing_place = existing_places_by_source_id[source_id]
+            metadata = get_operational_metadata(
+                element.get("tags", {})
+            )
+
+            existing_place.opening_hours = metadata["opening_hours"]
+            existing_place.website = metadata["website"]
+            existing_place.operator = metadata["operator"]
 
         for (
             element,
@@ -396,12 +467,20 @@ def import_places(
                     price_level=None,
                     rating=None,
                     dietary_options=get_dietary_options(tags),
+                    **get_operational_metadata(tags),
                 )
             )
 
         database.commit()
         print(f"Imported {len(candidates)} new places.")
-        print(f"Existing records skipped: {existing_count}")
+        print(
+            "Refreshed operational metadata for "
+            f"{len(refresh_candidates)} existing places."
+        )
+        print(
+            "Existing records skipped: "
+            f"{existing_count - len(refresh_candidates)}"
+        )
 
         print(f"Incomplete records skipped: {incomplete_count}")
         print(f"Out-of-scope records skipped: {out_of_scope_count}")
@@ -477,6 +556,14 @@ def parse_arguments() -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--refresh-existing",
+        action="store_true",
+        help=(
+            "Refresh operational metadata for explicitly approved "
+            "existing OSM records. Requires --source-id."
+        ),
+    )
+    parser.add_argument(
         "--limit",
         type=int,
         help="Maximum number of new records to preview or import.",
@@ -510,6 +597,11 @@ if __name__ == "__main__":
             f"Available categories: {available}."
         )
 
+    if arguments.refresh_existing and not arguments.source_ids:
+        raise SystemExit(
+            "--refresh-existing requires at least one --source-id."
+        )
+
     import_places(
         selected_city,
         layer=arguments.layer,
@@ -526,4 +618,5 @@ if __name__ == "__main__":
             else None
         ),
         show_details=arguments.show_details,
+        refresh_existing=arguments.refresh_existing,
     )

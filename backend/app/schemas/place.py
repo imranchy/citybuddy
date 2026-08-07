@@ -22,6 +22,9 @@ class PlaceRead(BaseModel):
     price_level: int | None
     rating: float | None
     dietary_options: list[str] = Field(default_factory=list)
+    opening_hours: str | None
+    website: str | None
+    operator: str | None
     primary_image: PlaceImageRead | None = None
 
 class NearbyPlaceRead(PlaceRead):

@@ -120,3 +120,18 @@ class Place(Base):
         nullable=False,
         server_default=func.now(),
     )
+
+    opening_hours: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+
+    website: Mapped[str | None] = mapped_column(
+        String(500),
+        nullable=True,
+    )
+
+    operator: Mapped[str | None] = mapped_column(
+        String(200),
+        nullable=True,
+    )

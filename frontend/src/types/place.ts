@@ -21,6 +21,9 @@ export type Place = {
   price_level: number | null;
   rating: number | null;
   dietary_options: string[];
+  opening_hours: string | null;
+  website: string | null;
+  operator: string | null;
   primary_image: PlaceImage | null;
   distance_km?: number;
 };

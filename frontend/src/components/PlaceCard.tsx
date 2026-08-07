@@ -31,6 +31,11 @@ export default function PlaceCard({ place }: PlaceCardProps) {
   const directionsUrl = getGoogleDirectionsUrl(place);
   const image = place.primary_image;
   const displayImageUrl = image?.thumbnail_url ?? image?.image_url;
+  const websiteUrl =
+    place.website?.startsWith("https://") ||
+    place.website?.startsWith("http://")
+      ? place.website
+      : undefined;
 
   return (
     <article className="rounded-3xl border border-white/10 bg-[#121936] p-6 transition duration-200 hover:-translate-y-1 hover:border-[#FF6846]/40 sm:p-7">
@@ -111,6 +116,50 @@ export default function PlaceCard({ place }: PlaceCardProps) {
       <p className="mt-5 text-sm text-[#FFF8E7]">
         {place.address}, {place.city}
       </p>
+
+      {(place.opening_hours || place.operator || websiteUrl) && (
+        <dl className="mt-5 space-y-2 rounded-2xl border border-white/10 bg-[#0B112B]/60 p-4 text-sm">
+          {place.opening_hours && (
+            <div className="flex gap-2">
+              <dt className="font-semibold text-[#FFC83D]">
+                Hours:
+              </dt>
+              <dd className="text-[#A9B1D6]">
+                {place.opening_hours}
+              </dd>
+            </div>
+          )}
+
+          {place.operator && (
+            <div className="flex gap-2">
+              <dt className="font-semibold text-[#FFC83D]">
+                Operator:
+              </dt>
+              <dd className="text-[#A9B1D6]">
+                {place.operator}
+              </dd>
+            </div>
+          )}
+
+          {websiteUrl && (
+            <div className="flex gap-2">
+              <dt className="font-semibold text-[#FFC83D]">
+                Website:
+              </dt>
+              <dd>
+                <a
+                  href={websiteUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[#A9B1D6] underline decoration-white/20 underline-offset-2 transition hover:text-[#FFF8E7]"
+                >
+                  Visit official website
+                </a>
+              </dd>
+            </div>
+          )}
+        </dl>
+      )}
 
       {place.dietary_options.length > 0 && (
         <div className="mt-5 flex flex-wrap gap-2">

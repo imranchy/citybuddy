@@ -75,6 +75,9 @@ def list_places(
         Place.price_level,
         Place.rating,
         Place.dietary_options,
+        Place.opening_hours,
+        Place.website,
+        Place.operator,
         primary_image_expression(),
     ).where(Place.category.in_(DESTINATION_CATEGORIES))
 
@@ -183,6 +186,9 @@ def list_nearby_places(
             Place.price_level,
             Place.rating,
             Place.dietary_options,
+            Place.opening_hours,
+            Place.website,
+            Place.operator,
             primary_image_expression(),
             distance_km,
         )
