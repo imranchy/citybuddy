@@ -5,10 +5,10 @@ from geoalchemy2 import Geography, Geometry
 from sqlalchemy import cast, func, select
 from sqlalchemy.orm import Session
 
-from app.core.place_catalog import DESTINATION_CATEGORIES
+from app.core.place_catalog import DESTINATION_CATEGORIES, group_categories
 from app.db.database import get_db
 from app.models.place import Place
-from app.schemas.place import NearbyPlaceRead, PlaceRead
+from app.schemas.place import CategoryGroupRead, NearbyPlaceRead, PlaceRead
 
 from app.models.place_image import PlaceImage
 
@@ -108,11 +108,11 @@ def list_places(
 
 @router.get(
     "/categories",
-    response_model=list[str],
+    response_model=list[CategoryGroupRead],
 )
 def list_place_categories(
     database: Annotated[Session, Depends(get_db)],
-) -> list[str]:
+) -> list[CategoryGroupRead]:
     statement = (
         select(Place.category)
         .where(Place.category.in_(DESTINATION_CATEGORIES))
@@ -122,7 +122,10 @@ def list_place_categories(
 
     categories = database.scalars(statement).all()
 
-    return list(categories)
+    return [
+        CategoryGroupRead.model_validate(group)
+        for group in group_categories(categories)
+    ]
 
 
 @router.get(

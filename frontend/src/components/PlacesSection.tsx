@@ -123,11 +123,11 @@ export default function PlacesSection() {
         />
 
         {places.length > 0 && (
-        <PlaceMap
-          places={places}
-          userLocation={userLocation}
-        />
-      )}
+          <PlaceMap
+            places={places}
+            userLocation={userLocation}
+          />
+        )}
 
         {isLoadingPlaces ? (
           <div className="mt-8 rounded-3xl border border-white/10 bg-[#121936] p-8 text-center text-[#A9B1D6]">

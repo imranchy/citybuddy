@@ -8,23 +8,23 @@ import PlacesSection from "@/components/PlacesSection";
 const suggestedSearches = [
   {
     label: "Near me",
-    query: "Restaurants and cafés near me",
+    query: "Interesting places near me",
   },
   {
-    label: "Under €25",
-    query: "Affordable restaurants under €25",
+    label: "Food & drink",
+    query: "Good local food and drink",
   },
   {
-    label: "Vegetarian",
-    query: "Restaurants with good vegetarian options",
+    label: "Culture",
+    query: "Museums, monuments and cultural attractions",
   },
   {
-    label: "Open now",
-    query: "Restaurants and cafés open now",
+    label: "Outdoors",
+    query: "Parks, gardens and viewpoints",
   },
   {
-    label: "Quiet",
-    query: "A quiet restaurant or café",
+    label: "Places of worship",
+    query: "Churches, mosques, temples and other places of worship",
   },
 ];
 
@@ -39,7 +39,7 @@ const features = [
     icon: "✦",
     title: "Personalised search",
     description:
-      "Search naturally using your budget, cuisine, dietary needs and preferred atmosphere.",
+      "Search naturally using your interests, location, budget, accessibility needs and preferred atmosphere.",
   },
   {
     icon: "✓",
@@ -87,7 +87,7 @@ export default function Home() {
     }
 
     setMessage(
-      `Search received: “${query}”. Personalised recommendation and filtering will be added in the next development phase.`,
+      `Search received: “${query}”. The upcoming assistant will ground recommendations in reviewed CityBuddy place data.`,
     );
   }
 
@@ -159,15 +159,15 @@ export default function Home() {
             id="hero-heading"
             className="text-4xl font-bold leading-tight tracking-tight sm:text-5xl md:text-7xl"
           >
-            Where do you want
+            What would you like
             <span className="block text-[#FF6846]">
-              to go today?
+              to discover today?
             </span>
           </h1>
 
           <p className="mx-auto mt-6 max-w-2xl text-base leading-7 text-[#A9B1D6] sm:mt-7 sm:text-lg sm:leading-8">
-            Discover restaurants and cafés based on your location, budget,
-            dietary needs and preferred atmosphere.
+            Discover food, culture, nature, nightlife, markets, community
+            spaces, places of worship and more around your city.
           </p>
 
           <form
@@ -185,7 +185,7 @@ export default function Home() {
                 type="search"
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder="A quiet vegetarian restaurant near Porta Nuova under €25..."
+                placeholder="A historic site, peaceful garden or local market near me..."
                 autoComplete="off"
                 className="min-h-14 min-w-0 flex-1 rounded-2xl border border-white/10 bg-[#0B112B] px-5 text-base text-[#FFF8E7] outline-none placeholder:text-[#A9B1D6]/60 focus:border-[#FF6846] focus:ring-2 focus:ring-[#FF6846]/30"
               />
@@ -268,7 +268,7 @@ export default function Home() {
       </section>
 
       <footer className="border-t border-white/10 px-4 py-8 text-center text-sm text-[#A9B1D6] sm:px-6">
-        CityBuddy Turin · Initial development version
+        CityBuddy Turin · Local discovery MVP
       </footer>
     </main>
   );

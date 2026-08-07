@@ -9,8 +9,6 @@ from sqlalchemy import select
 from app.core.cities import CityConfig, get_city
 from app.core.place_catalog import (
     DESTINATION_CATEGORIES,
-    TRANSPORT_CATEGORIES,
-    PlaceLayer,
     get_category,
     get_osm_filters,
 )
@@ -130,16 +128,15 @@ def get_operational_metadata(
 def fetch_osm_places(
     city: CityConfig,
     *,
-    layer: PlaceLayer,
     category: str | None,
 ) -> list[dict]:
     """Download configured places using small, retried Overpass queries."""
 
-    osm_filters = get_osm_filters(layer=layer, category=category)
+    osm_filters = get_osm_filters(category=category)
 
     if not osm_filters:
         raise ValueError(
-            f"Category '{category}' is not part of the {layer} layer."
+            f"Category '{category}' is not part of the discovery catalog."
         )
 
     collected_elements: dict[str, dict] = {}
@@ -281,7 +278,6 @@ def validate_refresh_request(
 def import_places(
     city: CityConfig,
     *,
-    layer: PlaceLayer,
     category: str | None,
     apply_changes: bool,
     limit: int | None,
@@ -292,11 +288,11 @@ def import_places(
     """Preview or import OSM places while avoiding duplicate records."""
     validate_refresh_request(refresh_existing, source_ids)
     print(
-        f"Downloading {layer} data for {city.display_name}, "
+        f"Downloading discovery data for {city.display_name}, "
         f"{city.country_code}..."
     )
 
-    elements = fetch_osm_places(city, layer=layer, category=category)
+    elements = fetch_osm_places(city, category=category)
     fetched_counts: Counter[str] = Counter()
     valid_elements: list[tuple[dict, str, str, float, float]] = []
     incomplete_count = 0
@@ -485,12 +481,6 @@ def import_places(
         print(f"Incomplete records skipped: {incomplete_count}")
         print(f"Out-of-scope records skipped: {out_of_scope_count}")
 
-        if layer == "transport":
-            print(
-                "Transport records are stored for the future transport "
-                "layer and are excluded from destination endpoints."
-            )
-
     except Exception:
         database.rollback()
         raise
@@ -527,12 +517,6 @@ def parse_arguments() -> argparse.Namespace:
         "--city",
         default="turin",
         help="Configured city key (default: turin).",
-    )
-    parser.add_argument(
-        "--layer",
-        choices=("destination", "transport"),
-        default="destination",
-        help="Data layer to ingest (default: destination).",
     )
     parser.add_argument(
         "--category",
@@ -584,16 +568,10 @@ if __name__ == "__main__":
     except ValueError as error:
         raise SystemExit(str(error)) from error
 
-    allowed_categories = (
-        DESTINATION_CATEGORIES
-        if arguments.layer == "destination"
-        else TRANSPORT_CATEGORIES
-    )
-
-    if arguments.category and arguments.category not in allowed_categories:
-        available = ", ".join(sorted(allowed_categories))
+    if arguments.category and arguments.category not in DESTINATION_CATEGORIES:
+        available = ", ".join(sorted(DESTINATION_CATEGORIES))
         raise SystemExit(
-            f"Invalid {arguments.layer} category '{arguments.category}'. "
+            f"Invalid category '{arguments.category}'. "
             f"Available categories: {available}."
         )
 
@@ -604,7 +582,6 @@ if __name__ == "__main__":
 
     import_places(
         selected_city,
-        layer=arguments.layer,
         category=arguments.category,
         apply_changes=arguments.apply,
         limit=(

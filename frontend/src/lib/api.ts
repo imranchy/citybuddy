@@ -1,4 +1,4 @@
-import type { Place } from "@/types/place";
+import type { CategoryGroup, Place } from "@/types/place";
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
@@ -47,8 +47,8 @@ export function getHealth(
 
 export function getPlaceCategories(
   signal?: AbortSignal,
-): Promise<string[]> {
-  return getJson<string[]>("/api/places/categories", signal);
+): Promise<CategoryGroup[]> {
+  return getJson<CategoryGroup[]>("/api/places/categories", signal);
 }
 
 export function getPlaces(

@@ -5,9 +5,9 @@ preview changes unless `--apply` is explicitly supplied.
 
 Run commands from `backend` with the virtual environment active.
 
-## Destination ingestion
+## Place ingestion
 
-Preview every configured destination category for Turin:
+Preview every configured discovery category for Turin:
 
 ```cmd
 python -m scripts.import_osm_places --city turin
@@ -54,17 +54,25 @@ python -m scripts.import_osm_places --city turin --category market --source-id n
 It requires at least one explicitly approved `--source-id`. Preview mode never
 writes database changes.
 
-## Transport ingestion
+## Discovery taxonomy
 
-Preview transport separately:
+Every record stores one stable leaf category. The application derives its
+display group from `app/core/place_catalog.py`; category groups are not copied
+into the database.
 
-```cmd
-python -m scripts.import_osm_places --city turin --layer transport --limit 20
-```
+- Food & Drink
+- Culture & Attractions
+- Nature & Recreation
+- Nightlife
+- Shopping & Markets
+- Learning & Community
+- Places of Worship
+- Accommodation
 
-Transport records are deliberately excluded from the destination APIs. Do not
-apply the full transport import until the dedicated transport API and map toggle
-are ready.
+Public-transport stops are intentionally outside the CityBuddy catalog. The
+future assistant may provide a key-free Google Maps transit directions link,
+but it must not invent routes or departure times. It must also tell users that
+routes, times, disruptions, and availability can change and should be verified.
 
 ## Wikimedia image enrichment
 
@@ -125,4 +133,20 @@ preview category counts before applying an import for a new city.
 
 Add the normalized category and its OSM selectors to
 `app/core/place_catalog.py`, then extend `get_category()` with its tag mapping.
-Destination and transport categories must remain in separate layers.
+Assign each category one canonical display group and add tests for its OSM tag
+normalization. Ambiguous categories should be previewed with `--show-details`
+and imported only through an explicit reviewed source-ID allowlist.
+
+## Post-deployment automation design
+
+Keep automated collection separate from publication. A scheduled job may fetch
+OSM and Wikimedia candidates into staging, run deterministic schema, duplicate,
+lifecycle, attribution, and URL checks, and then ask an agent to rank or flag
+records for review. Only approved source IDs should be promoted by the existing
+allowlist-based import commands. Agents must never write arbitrary records
+directly to production.
+
+Recommended pipeline: fetch to staging, validate, agent-assisted review, human
+approval, allowlisted promotion, audit report. Start with daily collection and
+manual promotion; automate promotion only after quality thresholds and rollback
+procedures have been proven in production.

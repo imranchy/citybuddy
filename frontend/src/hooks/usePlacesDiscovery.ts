@@ -7,14 +7,14 @@ import {
   getPlaceCategories,
   getPlaces,
 } from "@/lib/api";
-import type { Place } from "@/types/place";
+import type { CategoryGroup, Place } from "@/types/place";
 
 export default function usePlacesDiscovery() {
   const [places, setPlaces] = useState<Place[]>([]);
   const [placesStatus, setPlacesStatus] =
     useState("Loading places...");
   const [category, setCategory] = useState("");
-  const [categories, setCategories] = useState<string[]>([]);
+  const [categories, setCategories] = useState<CategoryGroup[]>([]);
   const [cityInput, setCityInput] = useState("Torino");
   const [city, setCity] = useState("Torino");
   const [limit, setLimit] = useState(5);

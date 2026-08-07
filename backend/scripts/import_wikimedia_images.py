@@ -50,7 +50,6 @@ def fetch_osm_wikidata_ids(city: CityConfig) -> dict[str, str]:
         f'nwr{osm_filter}["wikidata"]'
         f"({city.overpass_bounding_box});"
         for osm_filter in get_osm_filters(
-            layer="destination",
             image_eligible_only=True,
         )
     )

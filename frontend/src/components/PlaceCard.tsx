@@ -13,14 +13,33 @@ const categorySymbols: Record<string, string> = {
   attraction: "✦",
   bar: "◆",
   cafe: "☕",
+  buddhist_temple: "◇",
+  church: "✦",
+  community_centre: "◎",
+  fast_food: "●",
+  fitness_centre: "◆",
   gallery: "▣",
+  garden: "♧",
+  gurdwara: "◇",
+  hindu_temple: "◇",
+  historic_site: "⌂",
   hostel: "⌂",
   hotel: "◆",
   library: "▤",
   market: "◇",
+  monument: "▲",
+  mosque: "◇",
+  music_venue: "♫",
   museum: "⌂",
   park: "♧",
+  place_of_worship: "◇",
+  playground: "○",
+  pub: "◆",
   restaurant: "●",
+  shopping_centre: "▤",
+  sports_centre: "◆",
+  supermarket: "▤",
+  synagogue: "◇",
   theatre: "◐",
   tourist_information: "i",
   viewpoint: "⌖",
@@ -94,7 +113,7 @@ export default function PlaceCard({ place }: PlaceCardProps) {
       <div className="mt-6 flex items-start justify-between gap-4">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#FF6846]">
-            {place.category}
+            {place.category.replaceAll("_", " ")}
           </p>
 
           <h3 className="mt-2 text-2xl font-semibold">

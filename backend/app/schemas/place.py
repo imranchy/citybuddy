@@ -1,5 +1,17 @@
 from pydantic import BaseModel, Field
 
+
+class CategoryOptionRead(BaseModel):
+    key: str
+    label: str
+
+
+class CategoryGroupRead(BaseModel):
+    key: str
+    label: str
+    categories: list[CategoryOptionRead]
+
+
 class PlaceImageRead(BaseModel):
     source: str
     image_url: str

@@ -8,6 +8,17 @@ export type PlaceImage = {
   license_url: string | null;
 };
 
+export type CategoryOption = {
+  key: string;
+  label: string;
+};
+
+export type CategoryGroup = {
+  key: string;
+  label: string;
+  categories: CategoryOption[];
+};
+
 export type Place = {
   id: number;
   name: string;

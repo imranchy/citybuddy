@@ -1,8 +1,5 @@
 from dataclasses import dataclass
-from typing import Literal
-
-
-PlaceLayer = Literal["destination", "transport"]
+from typing import Iterable
 
 
 @dataclass(frozen=True, slots=True)
@@ -10,241 +7,137 @@ class CategoryDefinition:
     """A normalized CityBuddy category and its OSM selectors."""
 
     key: str
-    layer: PlaceLayer
+    label: str
+    group: str
     osm_filters: tuple[str, ...]
     image_eligible: bool = False
 
 
+CATEGORY_GROUP_LABELS = {
+    "food_drink": "Food & Drink",
+    "culture_attractions": "Culture & Attractions",
+    "nature_recreation": "Nature & Recreation",
+    "nightlife": "Nightlife",
+    "shopping_markets": "Shopping & Markets",
+    "learning_community": "Learning & Community",
+    "places_of_worship": "Places of Worship",
+    "accommodation": "Accommodation",
+}
+
+
 CATEGORY_DEFINITIONS: tuple[CategoryDefinition, ...] = (
-    CategoryDefinition(
-        "restaurant",
-        "destination",
-        ('["amenity"="restaurant"]["name"]',),
-    ),
-    CategoryDefinition(
-        "cafe",
-        "destination",
-        ('["amenity"="cafe"]["name"]',),
-    ),
-    CategoryDefinition(
-        "bar",
-        "destination",
-        ('["amenity"="bar"]["name"]',),
-    ),
-    CategoryDefinition(
-        "museum",
-        "destination",
-        ('["tourism"="museum"]["name"]',),
-        image_eligible=True,
-    ),
-    CategoryDefinition(
-        "gallery",
-        "destination",
-        ('["tourism"="gallery"]["name"]',),
-        image_eligible=True,
-    ),
-    CategoryDefinition(
-        "attraction",
-        "destination",
-        ('["tourism"="attraction"]["name"]',),
-        image_eligible=True,
-    ),
-    CategoryDefinition(
-        "park",
-        "destination",
-        ('["leisure"="park"]["name"]',),
-        image_eligible=True,
-    ),
-    CategoryDefinition(
-        "viewpoint",
-        "destination",
-        ('["tourism"="viewpoint"]["name"]',),
-        image_eligible=True,
-    ),
-    CategoryDefinition(
-        "library",
-        "destination",
-        ('["amenity"="library"]["name"]',),
-        image_eligible=True,
-    ),
-    CategoryDefinition(
-        "theatre",
-        "destination",
-        ('["amenity"="theatre"]["name"]',),
-        image_eligible=True,
-    ),
-    CategoryDefinition(
-        "market",
-        "destination",
-        ('["amenity"="marketplace"]["name"]',),
-        image_eligible=True,
-    ),
-    CategoryDefinition(
-        "hotel",
-        "destination",
-        ('["tourism"="hotel"]["name"]',),
-        image_eligible=True,
-    ),
-    CategoryDefinition(
-        "hostel",
-        "destination",
-        ('["tourism"="hostel"]["name"]',),
-        image_eligible=True,
-    ),
-    CategoryDefinition(
-        "tourist_information",
-        "destination",
-        ('["tourism"="information"]["information"="office"]["name"]',),
-    ),
-    CategoryDefinition(
-        "train_station",
-        "transport",
-        (
-            '["railway"="station"]["name"]',
-            '["railway"="halt"]["name"]',
-        ),
-    ),
-    CategoryDefinition(
-        "metro_station",
-        "transport",
-        ('["station"="subway"]["name"]',),
-    ),
-    CategoryDefinition(
-        "tram_stop",
-        "transport",
-        ('["railway"="tram_stop"]["name"]',),
-    ),
-    CategoryDefinition(
-        "bus_station",
-        "transport",
-        ('["amenity"="bus_station"]["name"]',),
-    ),
-    CategoryDefinition(
-        "bus_stop",
-        "transport",
-        ('["highway"="bus_stop"]["name"]',),
-    ),
-    CategoryDefinition(
-        "coach_stop",
-        "transport",
-        (
-            '["highway"="bus_stop"]["coach"="yes"]["name"]',
-            '["highway"="bus_stop"]["operator"~"FlixBus",i]["name"]',
-        ),
-    ),
-    CategoryDefinition(
-        "airport",
-        "transport",
-        ('["aeroway"="aerodrome"]["name"]',),
-    ),
+    CategoryDefinition("restaurant", "Restaurant", "food_drink", ('["amenity"="restaurant"]["name"]',)),
+    CategoryDefinition("cafe", "Cafe", "food_drink", ('["amenity"="cafe"]["name"]',)),
+    CategoryDefinition("bar", "Bar", "food_drink", ('["amenity"="bar"]["name"]',)),
+    CategoryDefinition("pub", "Pub", "food_drink", ('["amenity"="pub"]["name"]',)),
+    CategoryDefinition("fast_food", "Fast Food", "food_drink", ('["amenity"="fast_food"]["name"]',)),
+    CategoryDefinition("museum", "Museum", "culture_attractions", ('["tourism"="museum"]["name"]',), True),
+    CategoryDefinition("gallery", "Gallery", "culture_attractions", ('["tourism"="gallery"]["name"]',), True),
+    CategoryDefinition("attraction", "Attraction", "culture_attractions", ('["tourism"="attraction"]["name"]',), True),
+    CategoryDefinition("theatre", "Theatre", "culture_attractions", ('["amenity"="theatre"]["name"]',), True),
+    CategoryDefinition("monument", "Monument", "culture_attractions", ('["historic"="monument"]["name"]',), True),
+    CategoryDefinition("historic_site", "Historic Site", "culture_attractions", ('["historic"]["name"]',), True),
+    CategoryDefinition("viewpoint", "Viewpoint", "culture_attractions", ('["tourism"="viewpoint"]["name"]',), True),
+    CategoryDefinition("park", "Park", "nature_recreation", ('["leisure"="park"]["name"]',), True),
+    CategoryDefinition("garden", "Garden", "nature_recreation", ('["leisure"="garden"]["name"]',), True),
+    CategoryDefinition("playground", "Playground", "nature_recreation", ('["leisure"="playground"]["name"]',)),
+    CategoryDefinition("fitness_centre", "Fitness Centre", "nature_recreation", ('["leisure"="fitness_centre"]["name"]',)),
+    CategoryDefinition("sports_centre", "Sports Centre", "nature_recreation", ('["leisure"="sports_centre"]["name"]',)),
+    CategoryDefinition("nightclub", "Nightclub", "nightlife", ('["amenity"="nightclub"]["name"]',)),
+    CategoryDefinition("music_venue", "Music Venue", "nightlife", ('["amenity"="music_venue"]["name"]',), True),
+    CategoryDefinition("market", "Market", "shopping_markets", ('["amenity"="marketplace"]["name"]',), True),
+    CategoryDefinition("supermarket", "Supermarket", "shopping_markets", ('["shop"="supermarket"]["name"]',)),
+    CategoryDefinition("shopping_centre", "Shopping Centre", "shopping_markets", ('["shop"="mall"]["name"]',), True),
+    CategoryDefinition("library", "Library", "learning_community", ('["amenity"="library"]["name"]',), True),
+    CategoryDefinition("community_centre", "Community Centre", "learning_community", ('["amenity"="community_centre"]["name"]',)),
+    CategoryDefinition("tourist_information", "Tourist Information", "learning_community", ('["tourism"="information"]["information"="office"]["name"]',)),
+    CategoryDefinition("church", "Church", "places_of_worship", ('["amenity"="place_of_worship"]["religion"="christian"]["name"]',), True),
+    CategoryDefinition("mosque", "Mosque", "places_of_worship", ('["amenity"="place_of_worship"]["religion"="muslim"]["name"]',), True),
+    CategoryDefinition("synagogue", "Synagogue", "places_of_worship", ('["amenity"="place_of_worship"]["religion"="jewish"]["name"]',), True),
+    CategoryDefinition("hindu_temple", "Hindu Temple", "places_of_worship", ('["amenity"="place_of_worship"]["religion"="hindu"]["name"]',), True),
+    CategoryDefinition("buddhist_temple", "Buddhist Temple", "places_of_worship", ('["amenity"="place_of_worship"]["religion"="buddhist"]["name"]',), True),
+    CategoryDefinition("gurdwara", "Gurdwara", "places_of_worship", ('["amenity"="place_of_worship"]["religion"="sikh"]["name"]',), True),
+    CategoryDefinition("place_of_worship", "Other Place of Worship", "places_of_worship", ('["amenity"="place_of_worship"][!"religion"]["name"]',), True),
+    CategoryDefinition("hotel", "Hotel", "accommodation", ('["tourism"="hotel"]["name"]',), True),
+    CategoryDefinition("hostel", "Hostel", "accommodation", ('["tourism"="hostel"]["name"]',), True),
 )
 
-DESTINATION_CATEGORIES = frozenset(
-    definition.key
-    for definition in CATEGORY_DEFINITIONS
-    if definition.layer == "destination"
-)
-
-TRANSPORT_CATEGORIES = frozenset(
-    definition.key
-    for definition in CATEGORY_DEFINITIONS
-    if definition.layer == "transport"
-)
-
-IMAGE_CATEGORIES = frozenset(
-    definition.key
-    for definition in CATEGORY_DEFINITIONS
-    if definition.image_eligible
-)
+DESTINATION_CATEGORIES = frozenset(item.key for item in CATEGORY_DEFINITIONS)
+IMAGE_CATEGORIES = frozenset(item.key for item in CATEGORY_DEFINITIONS if item.image_eligible)
 
 
 def get_category(tags: dict[str, str]) -> str | None:
-    """Normalize OSM tags into a CityBuddy category."""
+    """Normalize OSM tags into a CityBuddy discovery category."""
 
     tourism = tags.get("tourism")
-
-    if tourism in {
-        "museum",
-        "gallery",
-        "attraction",
-        "viewpoint",
-        "hotel",
-        "hostel",
-    }:
+    if tourism in {"museum", "gallery", "attraction", "viewpoint", "hotel", "hostel"}:
         return tourism
-
     if tourism == "information" and tags.get("information") == "office":
         return "tourist_information"
 
     amenity = tags.get("amenity")
+    if amenity == "place_of_worship":
+        religion = tags.get("religion")
+        building = tags.get("building")
+        worship_categories = {
+            "christian": "church", "muslim": "mosque", "jewish": "synagogue",
+            "hindu": "hindu_temple", "buddhist": "buddhist_temple", "sikh": "gurdwara",
+        }
+        building_categories = {
+            "church": "church", "cathedral": "church", "chapel": "church",
+            "mosque": "mosque", "synagogue": "synagogue", "temple": "place_of_worship",
+        }
+        return worship_categories.get(religion, building_categories.get(building, "place_of_worship"))
 
-    if amenity in {"restaurant", "cafe", "bar", "library", "theatre"}:
+    amenity_categories = {
+        "restaurant", "cafe", "bar", "pub", "fast_food", "library", "theatre",
+        "community_centre", "nightclub", "music_venue",
+    }
+    if amenity in amenity_categories:
         return amenity
-
     if amenity == "marketplace":
         return "market"
 
-    if tags.get("leisure") == "park":
-        return "park"
-
-    if tags.get("aeroway") == "aerodrome":
-        return "airport"
-
-    railway = tags.get("railway")
-
-    if tags.get("station") == "subway" or tags.get("subway") == "yes":
-        return "metro_station"
-
-    if railway in {"station", "halt"}:
-        return "train_station"
-
-    if railway == "tram_stop":
-        return "tram_stop"
-
-    if amenity == "bus_station":
-        return "coach_stop" if _is_coach_stop(tags) else "bus_station"
-
-    if tags.get("highway") == "bus_stop":
-        return "coach_stop" if _is_coach_stop(tags) else "bus_stop"
-
+    leisure = tags.get("leisure")
+    if leisure in {"park", "garden", "playground", "fitness_centre", "sports_centre"}:
+        return leisure
+    if tags.get("shop") == "supermarket":
+        return "supermarket"
+    if tags.get("shop") == "mall":
+        return "shopping_centre"
+    if tags.get("historic") == "monument":
+        return "monument"
+    if tags.get("historic"):
+        return "historic_site"
     return None
 
 
-def get_osm_filters(
-    *,
-    layer: PlaceLayer | Literal["all"] = "destination",
-    category: str | None = None,
-    image_eligible_only: bool = False,
-) -> tuple[str, ...]:
-    """Return de-duplicated OSM filters for an ingestion scope."""
+def get_osm_filters(*, category: str | None = None, image_eligible_only: bool = False) -> tuple[str, ...]:
+    """Return de-duplicated OSM filters for the discovery catalog."""
 
     filters: list[str] = []
-
     for definition in CATEGORY_DEFINITIONS:
-        if layer != "all" and definition.layer != layer:
-            continue
-
         if category and definition.key != category:
             continue
-
         if image_eligible_only and not definition.image_eligible:
             continue
-
         for osm_filter in definition.osm_filters:
             if osm_filter not in filters:
                 filters.append(osm_filter)
-
     return tuple(filters)
 
 
-def _is_coach_stop(tags: dict[str, str]) -> bool:
-    searchable_values = " ".join(
-        tags.get(key, "")
-        for key in ("brand", "network", "operator")
-    ).lower()
+def group_categories(categories: Iterable[str]) -> list[dict[str, object]]:
+    """Group available leaf categories in stable product-display order."""
 
-    return (
-        tags.get("coach") == "yes"
-        or tags.get("bus") == "long_distance"
-        or "flixbus" in searchable_values
-    )
+    available = set(categories)
+    groups: list[dict[str, object]] = []
+    for group_key, group_label in CATEGORY_GROUP_LABELS.items():
+        options = [
+            {"key": item.key, "label": item.label}
+            for item in CATEGORY_DEFINITIONS
+            if item.group == group_key and item.key in available
+        ]
+        if options:
+            groups.append({"key": group_key, "label": group_label, "categories": options})
+    return groups

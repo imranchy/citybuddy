@@ -1,7 +1,9 @@
 "use client";
 
+import type { CategoryGroup } from "@/types/place";
+
 type PlaceFiltersProps = {
-  categories: string[];
+  categories: CategoryGroup[];
   category: string;
   cityInput: string;
   limit: number;
@@ -49,19 +51,17 @@ export default function PlaceFilters({
         >
           <option value="">All categories</option>
 
-          {categories.map((availableCategory) => (
-            <option
-              key={availableCategory}
-              value={availableCategory}
-            >
-              {availableCategory
-                .split("_")
-                .map(
-                  (word) =>
-                    word.charAt(0).toUpperCase() + word.slice(1),
-                )
-                .join(" ")}
-            </option>
+          {categories.map((group) => (
+            <optgroup key={group.key} label={group.label}>
+              {group.categories.map((availableCategory) => (
+                <option
+                  key={availableCategory.key}
+                  value={availableCategory.key}
+                >
+                  {availableCategory.label}
+                </option>
+              ))}
+            </optgroup>
           ))}
         </select>
       </div>
