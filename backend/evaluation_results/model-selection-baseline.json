@@ -1,0 +1,3701 @@
+{
+  "generated_at": "2026-08-10T18:43:43.628029+00:00",
+  "ollama_url": "http://127.0.0.1:11434",
+  "langsmith": {
+    "enabled": false,
+    "project": null
+  },
+  "models": [
+    {
+      "model": "gemma3:4b",
+      "passed_cases": 4,
+      "total_cases": 17,
+      "score_percent": 23.5,
+      "metrics": {
+        "strict_case_accuracy_percent": 23.5,
+        "response_success_percent": 94.1,
+        "schema_validity_percent": 94.1,
+        "field_accuracy_percent": 66.1,
+        "intent_field_accuracy_percent": 56.2,
+        "grounding_check_accuracy_percent": 100.0,
+        "supported_claim_rate_percent": 100.0,
+        "entity_hallucination_rate_percent": 0.0,
+        "attribute_hallucination_rate_percent": 0.0,
+        "contradiction_rate_percent": 0.0,
+        "abstention_accuracy_percent": 100.0,
+        "recommendation_evidence_coverage_percent": 100.0
+      },
+      "latency": {
+        "cold_first_call_ms": 11050.734,
+        "cold_load_ms": 9001.823,
+        "warm_average_ms": 3116.6,
+        "warm_median_ms": 3226.2,
+        "warm_p95_ms": 4121.0
+      },
+      "claim_totals": {
+        "supported": 3,
+        "unknown_entity": 0,
+        "unsupported_attribute": 0,
+        "contradiction": 0
+      },
+      "claim_evidence": {
+        "total_claims": 3,
+        "supported_claims": 3,
+        "recommendations": 3,
+        "recommendations_with_evidence": 3
+      },
+      "errors": {
+        "total": 1,
+        "timeout": 0,
+        "schema_or_output": 1,
+        "provider": 0
+      },
+      "cases": [
+        {
+          "kind": "intent",
+          "key": "museum_count",
+          "passed": false,
+          "response_received": true,
+          "schema_valid": true,
+          "checks": {
+            "categories": false,
+            "language": true,
+            "city": true,
+            "limit": true,
+            "nearby": true,
+            "radius_km": true,
+            "wants_transport": true,
+            "unsupported_constraints": false
+          },
+          "output": {
+            "city": "turin",
+            "categories": [],
+            "limit": 3,
+            "nearby": false,
+            "radius_km": null,
+            "wants_transport": false,
+            "language": "en",
+            "unsupported_constraints": [
+              "live_transport",
+              "live_opening_status",
+              "live_availability",
+              "unsupported_city"
+            ]
+          },
+          "duration_ms": 11050.734,
+          "load_duration_ms": 9001.823,
+          "prompt_tokens": 526,
+          "output_tokens": 56
+        },
+        {
+          "kind": "intent",
+          "key": "italian_food",
+          "passed": false,
+          "response_received": true,
+          "schema_valid": true,
+          "checks": {
+            "categories": false,
+            "language": false,
+            "city": true,
+            "limit": false,
+            "nearby": false,
+            "radius_km": true,
+            "wants_transport": true,
+            "unsupported_constraints": false
+          },
+          "output": {
+            "city": "turin",
+            "categories": [],
+            "limit": 1,
+            "nearby": true,
+            "radius_km": null,
+            "wants_transport": false,
+            "language": "en",
+            "unsupported_constraints": [
+              "live_opening_status",
+              "live_availability",
+              "unsupported_city"
+            ]
+          },
+          "duration_ms": 3042.546,
+          "load_duration_ms": 1252.187,
+          "prompt_tokens": 528,
+          "output_tokens": 43
+        },
+        {
+          "kind": "intent",
+          "key": "quiet_reading",
+          "passed": false,
+          "response_received": true,
+          "schema_valid": true,
+          "checks": {
+            "categories": false,
+            "language": true,
+            "city": true,
+            "limit": false,
+            "nearby": false,
+            "radius_km": true,
+            "wants_transport": true,
+            "unsupported_constraints": false
+          },
+          "output": {
+            "city": "turin",
+            "categories": [],
+            "limit": 10,
+            "nearby": true,
+            "radius_km": null,
+            "wants_transport": false,
+            "language": "en",
+            "unsupported_constraints": [
+              "live_transport",
+              "live_opening_status",
+              "live_availability",
+              "unsupported_city"
+            ]
+          },
+          "duration_ms": 3390.705,
+          "load_duration_ms": 1229.643,
+          "prompt_tokens": 532,
+          "output_tokens": 49
+        },
+        {
+          "kind": "intent",
+          "key": "outdoors",
+          "passed": false,
+          "response_received": true,
+          "schema_valid": true,
+          "checks": {
+            "categories": false,
+            "language": true,
+            "city": true,
+            "limit": false,
+            "nearby": true,
+            "radius_km": true,
+            "wants_transport": true,
+            "unsupported_constraints": false
+          },
+          "output": {
+            "city": "turin",
+            "categories": [],
+            "limit": 10,
+            "nearby": true,
+            "radius_km": 2.0,
+            "wants_transport": false,
+            "language": "en",
+            "unsupported_constraints": [
+              "live_opening_status",
+              "live_availability",
+              "live_transport",
+              "unsupported_city"
+            ]
+          },
+          "duration_ms": 3796.719,
+          "load_duration_ms": 1292.816,
+          "prompt_tokens": 532,
+          "output_tokens": 67
+        },
+        {
+          "kind": "intent",
+          "key": "nightlife",
+          "passed": false,
+          "response_received": true,
+          "schema_valid": true,
+          "checks": {
+            "categories": false,
+            "language": false,
+            "city": true,
+            "limit": false,
+            "nearby": false,
+            "radius_km": true,
+            "wants_transport": true,
+            "unsupported_constraints": false
+          },
+          "output": {
+            "city": "turin",
+            "categories": [],
+            "limit": 10,
+            "nearby": true,
+            "radius_km": null,
+            "wants_transport": false,
+            "language": "en",
+            "unsupported_constraints": [
+              "live_transport",
+              "live_opening_status",
+              "live_availability",
+              "unsupported_city"
+            ]
+          },
+          "duration_ms": 3267.336,
+          "load_duration_ms": 1146.488,
+          "prompt_tokens": 528,
+          "output_tokens": 49
+        },
+        {
+          "kind": "intent",
+          "key": "market",
+          "passed": false,
+          "response_received": true,
+          "schema_valid": true,
+          "checks": {
+            "categories": false,
+            "language": true,
+            "city": true,
+            "limit": false,
+            "nearby": false,
+            "radius_km": true,
+            "wants_transport": true,
+            "unsupported_constraints": false
+          },
+          "output": {
+            "city": "turin",
+            "categories": [],
+            "limit": 1,
+            "nearby": true,
+            "radius_km": null,
+            "wants_transport": false,
+            "language": "en",
+            "unsupported_constraints": [
+              "live_transport",
+              "live_opening_status",
+              "live_availability",
+              "unsupported_city"
+            ]
+          },
+          "duration_ms": 3327.59,
+          "load_duration_ms": 1281.039,
+          "prompt_tokens": 527,
+          "output_tokens": 48
+        },
+        {
+          "kind": "intent",
+          "key": "worship",
+          "passed": false,
+          "response_received": false,
+          "schema_valid": false,
+          "error_kind": "schema_or_output",
+          "error": "Ollama model 'gemma3:4b' did not return valid structured output: 1 validation error for DiscoveryIntent\ncategories\n  Value error, Unsupported CityBuddy category: places_of_worship [type=value_error, input_value=['places_of_worship', 'mosque'], input_type=list]\n    For further information visit https://errors.pydantic.dev/2.13/v/value_error"
+        },
+        {
+          "kind": "intent",
+          "key": "accommodation",
+          "passed": false,
+          "response_received": true,
+          "schema_valid": true,
+          "checks": {
+            "categories": false,
+            "language": true,
+            "city": true,
+            "limit": false,
+            "nearby": false,
+            "radius_km": true,
+            "wants_transport": true,
+            "unsupported_constraints": false
+          },
+          "output": {
+            "city": "turin",
+            "categories": [],
+            "limit": 10,
+            "nearby": true,
+            "radius_km": null,
+            "wants_transport": false,
+            "language": "en",
+            "unsupported_constraints": [
+              "live_transport",
+              "live_opening_status",
+              "live_availability",
+              "unsupported_city"
+            ]
+          },
+          "duration_ms": 3431.414,
+          "load_duration_ms": 1258.986,
+          "prompt_tokens": 527,
+          "output_tokens": 49
+        },
+        {
+          "kind": "intent",
+          "key": "culture",
+          "passed": false,
+          "response_received": true,
+          "schema_valid": true,
+          "checks": {
+            "categories": false,
+            "language": true,
+            "city": true,
+            "limit": false,
+            "nearby": true,
+            "radius_km": true,
+            "wants_transport": true,
+            "unsupported_constraints": false
+          },
+          "output": {
+            "city": "turin",
+            "categories": [],
+            "limit": 10,
+            "nearby": true,
+            "radius_km": null,
+            "wants_transport": false,
+            "language": "en",
+            "unsupported_constraints": [
+              "live_transport",
+              "live_opening_status",
+              "live_availability",
+              "unsupported_city"
+            ]
+          },
+          "duration_ms": 3072.111,
+          "load_duration_ms": 1225.7,
+          "prompt_tokens": 528,
+          "output_tokens": 49
+        },
+        {
+          "kind": "intent",
+          "key": "transport",
+          "passed": false,
+          "response_received": true,
+          "schema_valid": true,
+          "checks": {
+            "categories": false,
+            "language": true,
+            "city": true,
+            "limit": false,
+            "nearby": false,
+            "radius_km": true,
+            "wants_transport": true,
+            "unsupported_constraints": false
+          },
+          "output": {
+            "city": "turin",
+            "categories": [],
+            "limit": 1,
+            "nearby": true,
+            "radius_km": null,
+            "wants_transport": true,
+            "language": "en",
+            "unsupported_constraints": [
+              "live_transport",
+              "live_opening_status",
+              "live_availability",
+              "live_transport",
+              "unsupported_city"
+            ]
+          },
+          "duration_ms": 3573.241,
+          "load_duration_ms": 1180.562,
+          "prompt_tokens": 534,
+          "output_tokens": 61
+        },
+        {
+          "kind": "intent",
+          "key": "live_open",
+          "passed": false,
+          "response_received": true,
+          "schema_valid": true,
+          "checks": {
+            "categories": false,
+            "language": false,
+            "city": true,
+            "limit": false,
+            "nearby": true,
+            "radius_km": true,
+            "wants_transport": true,
+            "unsupported_constraints": true
+          },
+          "output": {
+            "city": "turin",
+            "categories": [],
+            "limit": 10,
+            "nearby": false,
+            "radius_km": null,
+            "wants_transport": false,
+            "language": "en",
+            "unsupported_constraints": [
+              "live_opening_status"
+            ]
+          },
+          "duration_ms": 2653.886,
+          "load_duration_ms": 1265.896,
+          "prompt_tokens": 530,
+          "output_tokens": 41
+        },
+        {
+          "kind": "intent",
+          "key": "unsupported_city",
+          "passed": false,
+          "response_received": true,
+          "schema_valid": true,
+          "checks": {
+            "categories": false,
+            "language": true,
+            "city": true,
+            "limit": false,
+            "nearby": false,
+            "radius_km": true,
+            "wants_transport": true,
+            "unsupported_constraints": false
+          },
+          "output": {
+            "city": "lisbon",
+            "categories": [],
+            "limit": 1,
+            "nearby": true,
+            "radius_km": null,
+            "wants_transport": false,
+            "language": "en",
+            "unsupported_constraints": [
+              "live_opening_status",
+              "live_availability",
+              "unsupported_city"
+            ]
+          },
+          "duration_ms": 2803.034,
+          "load_duration_ms": 1154.698,
+          "prompt_tokens": 526,
+          "output_tokens": 43
+        },
+        {
+          "kind": "intent",
+          "key": "unverified_rating",
+          "passed": false,
+          "response_received": true,
+          "schema_valid": true,
+          "checks": {
+            "categories": true,
+            "language": true,
+            "city": true,
+            "limit": true,
+            "nearby": true,
+            "radius_km": true,
+            "wants_transport": true,
+            "unsupported_constraints": false
+          },
+          "output": {
+            "city": "turin",
+            "categories": [
+              "restaurant"
+            ],
+            "limit": 5,
+            "nearby": false,
+            "radius_km": null,
+            "wants_transport": false,
+            "language": "en",
+            "unsupported_constraints": []
+          },
+          "duration_ms": 2667.153,
+          "load_duration_ms": 1229.768,
+          "prompt_tokens": 529,
+          "output_tokens": 35
+        },
+        {
+          "kind": "grounding",
+          "key": "retrieved_only",
+          "passed": true,
+          "response_received": true,
+          "schema_valid": true,
+          "checks": {
+            "retrieved_place_ids_only": true,
+            "unique_place_ids": true,
+            "no_forbidden_claims": true,
+            "machine_checkable_claims_supported": true,
+            "recommendations_have_evidence": true,
+            "correct_abstention": true,
+            "recommendation_presence_matches_abstention": true
+          },
+          "output": {
+            "recommendations": [
+              {
+                "place_id": 101,
+                "reason": "This retrieved place is a Cinema Museum."
+              },
+              {
+                "place_id": 102,
+                "reason": "This retrieved place is an Art Museum."
+              }
+            ],
+            "claims": [
+              {
+                "place_id": 101,
+                "field": "name",
+                "value": "Cinema Museum"
+              },
+              {
+                "place_id": 102,
+                "field": "category",
+                "value": "museum"
+              }
+            ],
+            "abstained": false,
+            "summary": "Two retrieved museums match the request."
+          },
+          "duration_ms": 4120.958,
+          "load_duration_ms": 1174.257,
+          "prompt_tokens": 437,
+          "output_tokens": 177,
+          "claim_counts": {
+            "supported": 2,
+            "unknown_entity": 0,
+            "unsupported_attribute": 0,
+            "contradiction": 0
+          }
+        },
+        {
+          "kind": "grounding",
+          "key": "transport_safety",
+          "passed": true,
+          "response_received": true,
+          "schema_valid": true,
+          "checks": {
+            "retrieved_place_ids_only": true,
+            "unique_place_ids": true,
+            "no_forbidden_claims": true,
+            "machine_checkable_claims_supported": true,
+            "recommendations_have_evidence": true,
+            "correct_abstention": true,
+            "recommendation_presence_matches_abstention": true
+          },
+          "output": {
+            "recommendations": [
+              {
+                "place_id": 201,
+                "reason": "This retrieved place is a museum."
+              }
+            ],
+            "claims": [
+              {
+                "place_id": 201,
+                "field": "category",
+                "value": "museum"
+              }
+            ],
+            "abstained": false,
+            "summary": "One retrieved museum matches the request."
+          },
+          "duration_ms": 3226.219,
+          "load_duration_ms": 1112.108,
+          "prompt_tokens": 401,
+          "output_tokens": 109,
+          "claim_counts": {
+            "supported": 1,
+            "unknown_entity": 0,
+            "unsupported_attribute": 0,
+            "contradiction": 0
+          }
+        },
+        {
+          "kind": "grounding",
+          "key": "missing_live_facts",
+          "passed": true,
+          "response_received": true,
+          "schema_valid": true,
+          "checks": {
+            "retrieved_place_ids_only": true,
+            "unique_place_ids": true,
+            "no_forbidden_claims": true,
+            "machine_checkable_claims_supported": true,
+            "recommendations_have_evidence": true,
+            "correct_abstention": true,
+            "recommendation_presence_matches_abstention": true
+          },
+          "output": {
+            "recommendations": [],
+            "claims": [],
+            "abstained": true,
+            "summary": "Insufficient information to determine which place is open now and has the best rating."
+          },
+          "duration_ms": 2250.714,
+          "load_duration_ms": 1233.601,
+          "prompt_tokens": 380,
+          "output_tokens": 46,
+          "claim_counts": {
+            "supported": 0,
+            "unknown_entity": 0,
+            "unsupported_attribute": 0,
+            "contradiction": 0
+          }
+        },
+        {
+          "kind": "grounding",
+          "key": "no_retrieved_records",
+          "passed": true,
+          "response_received": true,
+          "schema_valid": true,
+          "checks": {
+            "retrieved_place_ids_only": true,
+            "unique_place_ids": true,
+            "no_forbidden_claims": true,
+            "machine_checkable_claims_supported": true,
+            "recommendations_have_evidence": true,
+            "correct_abstention": true,
+            "recommendation_presence_matches_abstention": true
+          },
+          "output": {
+            "recommendations": [],
+            "claims": [],
+            "abstained": true,
+            "summary": "No retrieved cafes match the request."
+          },
+          "duration_ms": 2125.568,
+          "load_duration_ms": 1208.96,
+          "prompt_tokens": 316,
+          "output_tokens": 38,
+          "claim_counts": {
+            "supported": 0,
+            "unknown_entity": 0,
+            "unsupported_attribute": 0,
+            "contradiction": 0
+          }
+        }
+      ],
+      "evaluation_definition": {
+        "intent_cases": [
+          {
+            "key": "museum_count",
+            "query": "Find three museums in Turin.",
+            "categories": [
+              "museum"
+            ],
+            "language": "en",
+            "city": "turin",
+            "limit": 3,
+            "nearby": false,
+            "radius_km": null,
+            "wants_transport": false,
+            "unsupported_constraints": []
+          },
+          {
+            "key": "italian_food",
+            "query": "Vorrei trovare un ristorante a Torino.",
+            "categories": [
+              "restaurant"
+            ],
+            "language": "it",
+            "city": "turin",
+            "limit": 5,
+            "nearby": false,
+            "radius_km": null,
+            "wants_transport": false,
+            "unsupported_constraints": []
+          },
+          {
+            "key": "quiet_reading",
+            "query": "I want a quiet public place to read and borrow books.",
+            "categories": [
+              "library"
+            ],
+            "language": "en",
+            "city": "turin",
+            "limit": 5,
+            "nearby": false,
+            "radius_km": null,
+            "wants_transport": false,
+            "unsupported_constraints": []
+          },
+          {
+            "key": "outdoors",
+            "query": "Show me parks and gardens around me within 2 km.",
+            "categories": [
+              "park",
+              "garden"
+            ],
+            "language": "en",
+            "city": "turin",
+            "limit": 5,
+            "nearby": true,
+            "radius_km": 2.0,
+            "wants_transport": false,
+            "unsupported_constraints": []
+          },
+          {
+            "key": "nightlife",
+            "query": "Cerco una discoteca a Torino.",
+            "categories": [
+              "nightclub"
+            ],
+            "language": "it",
+            "city": "turin",
+            "limit": 5,
+            "nearby": false,
+            "radius_km": null,
+            "wants_transport": false,
+            "unsupported_constraints": []
+          },
+          {
+            "key": "market",
+            "query": "Find a local market in Torino.",
+            "categories": [
+              "market"
+            ],
+            "language": "en",
+            "city": "turin",
+            "limit": 5,
+            "nearby": false,
+            "radius_km": null,
+            "wants_transport": false,
+            "unsupported_constraints": []
+          },
+          {
+            "key": "worship",
+            "query": "Cerco una moschea a Torino.",
+            "categories": [
+              "mosque"
+            ],
+            "language": "it",
+            "city": "turin",
+            "limit": 5,
+            "nearby": false,
+            "radius_km": null,
+            "wants_transport": false,
+            "unsupported_constraints": []
+          },
+          {
+            "key": "accommodation",
+            "query": "Show hotels and hostels in Turin.",
+            "categories": [
+              "hotel",
+              "hostel"
+            ],
+            "language": "en",
+            "city": "turin",
+            "limit": 5,
+            "nearby": false,
+            "radius_km": null,
+            "wants_transport": false,
+            "unsupported_constraints": []
+          },
+          {
+            "key": "culture",
+            "query": "I would like museums or galleries nearby.",
+            "categories": [
+              "museum",
+              "gallery"
+            ],
+            "language": "en",
+            "city": "turin",
+            "limit": 5,
+            "nearby": true,
+            "radius_km": null,
+            "wants_transport": false,
+            "unsupported_constraints": []
+          },
+          {
+            "key": "transport",
+            "query": "Find a museum and tell me how to reach it by public transport.",
+            "categories": [
+              "museum"
+            ],
+            "language": "en",
+            "city": "turin",
+            "limit": 5,
+            "nearby": false,
+            "radius_km": null,
+            "wants_transport": true,
+            "unsupported_constraints": [
+              "live_transport"
+            ]
+          },
+          {
+            "key": "live_open",
+            "query": "Quali musei sono aperti proprio adesso?",
+            "categories": [
+              "museum"
+            ],
+            "language": "it",
+            "city": "turin",
+            "limit": 5,
+            "nearby": false,
+            "radius_km": null,
+            "wants_transport": false,
+            "unsupported_constraints": [
+              "live_opening_status"
+            ]
+          },
+          {
+            "key": "unsupported_city",
+            "query": "Find a cafe in Lisbon.",
+            "categories": [
+              "cafe"
+            ],
+            "language": "en",
+            "city": "lisbon",
+            "limit": 5,
+            "nearby": false,
+            "radius_km": null,
+            "wants_transport": false,
+            "unsupported_constraints": [
+              "unsupported_city"
+            ]
+          },
+          {
+            "key": "unverified_rating",
+            "query": "Find a Michelin-starred restaurant in Turin.",
+            "categories": [
+              "restaurant"
+            ],
+            "language": "en",
+            "city": "turin",
+            "limit": 5,
+            "nearby": false,
+            "radius_km": null,
+            "wants_transport": false,
+            "unsupported_constraints": [
+              "unverified_rating"
+            ]
+          }
+        ],
+        "grounding_cases": [
+          {
+            "key": "retrieved_only",
+            "request": "Recommend two museums for art and cinema.",
+            "records": [
+              {
+                "id": 101,
+                "name": "Cinema Museum",
+                "category": "museum",
+                "description": "Exhibits about cinema.",
+                "address": "Via A 1",
+                "opening_hours": null,
+                "rating": null,
+                "price_level": null
+              },
+              {
+                "id": 102,
+                "name": "Art Museum",
+                "category": "museum",
+                "description": "A collection of modern art.",
+                "address": "Via B 2",
+                "opening_hours": null,
+                "rating": null,
+                "price_level": null
+              }
+            ],
+            "forbidden_phrases": [
+              "open now",
+              "five stars",
+              "5 stars",
+              "free entry",
+              "€"
+            ],
+            "should_abstain": false
+          },
+          {
+            "key": "transport_safety",
+            "request": "Recommend this museum. I also asked for public transport, but do not supply route or departure facts; application code adds the Google Maps transit link and safety disclaimer.",
+            "records": [
+              {
+                "id": 201,
+                "name": "City Museum",
+                "category": "museum",
+                "description": "Local history exhibits.",
+                "address": "Piazza C 3",
+                "opening_hours": null,
+                "rating": null,
+                "price_level": null
+              }
+            ],
+            "forbidden_phrases": [
+              "bus 4",
+              "every 10 minutes",
+              "departs at",
+              "arrives at",
+              "on time"
+            ],
+            "should_abstain": false
+          },
+          {
+            "key": "missing_live_facts",
+            "request": "Which retrieved place is open now and has the best rating?",
+            "records": [
+              {
+                "id": 301,
+                "name": "Riverside Gallery",
+                "category": "gallery",
+                "description": "Contemporary exhibitions.",
+                "address": "Via D 4",
+                "opening_hours": null,
+                "rating": null,
+                "price_level": null
+              }
+            ],
+            "forbidden_phrases": [
+              "riverside gallery is open",
+              "riverside gallery has a rating",
+              "riverside gallery is rated",
+              "rating is 5"
+            ],
+            "should_abstain": true
+          },
+          {
+            "key": "no_retrieved_records",
+            "request": "Recommend a quiet cafe.",
+            "records": [],
+            "forbidden_phrases": [],
+            "should_abstain": true
+          }
+        ]
+      }
+    },
+    {
+      "model": "llama3.1:8b",
+      "passed_cases": 8,
+      "total_cases": 17,
+      "score_percent": 47.1,
+      "metrics": {
+        "strict_case_accuracy_percent": 47.1,
+        "response_success_percent": 88.2,
+        "schema_validity_percent": 100.0,
+        "field_accuracy_percent": 92.2,
+        "intent_field_accuracy_percent": 89.8,
+        "grounding_check_accuracy_percent": 100.0,
+        "supported_claim_rate_percent": 100.0,
+        "entity_hallucination_rate_percent": 0.0,
+        "attribute_hallucination_rate_percent": 0.0,
+        "contradiction_rate_percent": 0.0,
+        "abstention_accuracy_percent": 100.0,
+        "recommendation_evidence_coverage_percent": 100.0
+      },
+      "latency": {
+        "cold_first_call_ms": 7630.135,
+        "cold_load_ms": 6418.743,
+        "warm_average_ms": 1587.8,
+        "warm_median_ms": 1366.0,
+        "warm_p95_ms": 3282.4
+      },
+      "claim_totals": {
+        "supported": 4,
+        "unknown_entity": 0,
+        "unsupported_attribute": 0,
+        "contradiction": 0
+      },
+      "claim_evidence": {
+        "total_claims": 4,
+        "supported_claims": 4,
+        "recommendations": 3,
+        "recommendations_with_evidence": 3
+      },
+      "errors": {
+        "total": 2,
+        "timeout": 2,
+        "schema_or_output": 0,
+        "provider": 0
+      },
+      "cases": [
+        {
+          "kind": "intent",
+          "key": "museum_count",
+          "passed": false,
+          "response_received": true,
+          "schema_valid": true,
+          "checks": {
+            "categories": true,
+            "language": true,
+            "city": true,
+            "limit": false,
+            "nearby": true,
+            "radius_km": true,
+            "wants_transport": true,
+            "unsupported_constraints": true
+          },
+          "output": {
+            "city": "turin",
+            "categories": [
+              "museum"
+            ],
+            "limit": 5,
+            "nearby": false,
+            "radius_km": null,
+            "wants_transport": false,
+            "language": "en",
+            "unsupported_constraints": []
+          },
+          "duration_ms": 7630.135,
+          "load_duration_ms": 6418.743,
+          "prompt_tokens": 515,
+          "output_tokens": 40
+        },
+        {
+          "kind": "intent",
+          "key": "italian_food",
+          "passed": false,
+          "response_received": true,
+          "schema_valid": true,
+          "checks": {
+            "categories": true,
+            "language": false,
+            "city": true,
+            "limit": true,
+            "nearby": true,
+            "radius_km": true,
+            "wants_transport": true,
+            "unsupported_constraints": true
+          },
+          "output": {
+            "city": "turin",
+            "categories": [
+              "restaurant"
+            ],
+            "limit": 5,
+            "nearby": false,
+            "radius_km": null,
+            "wants_transport": false,
+            "language": "en",
+            "unsupported_constraints": []
+          },
+          "duration_ms": 1200.701,
+          "load_duration_ms": 561.266,
+          "prompt_tokens": 520,
+          "output_tokens": 33
+        },
+        {
+          "kind": "intent",
+          "key": "quiet_reading",
+          "passed": true,
+          "response_received": true,
+          "schema_valid": true,
+          "checks": {
+            "categories": true,
+            "language": true,
+            "city": true,
+            "limit": true,
+            "nearby": true,
+            "radius_km": true,
+            "wants_transport": true,
+            "unsupported_constraints": true
+          },
+          "output": {
+            "city": "turin",
+            "categories": [
+              "library"
+            ],
+            "limit": 5,
+            "nearby": false,
+            "radius_km": null,
+            "wants_transport": false,
+            "language": "en",
+            "unsupported_constraints": []
+          },
+          "duration_ms": 1335.87,
+          "load_duration_ms": 595.928,
+          "prompt_tokens": 520,
+          "output_tokens": 39
+        },
+        {
+          "kind": "intent",
+          "key": "outdoors",
+          "passed": false,
+          "response_received": false,
+          "schema_valid": null,
+          "error_kind": "timeout",
+          "error": "Ollama model 'llama3.1:8b' did not return valid structured output: timed out"
+        },
+        {
+          "kind": "intent",
+          "key": "nightlife",
+          "passed": false,
+          "response_received": true,
+          "schema_valid": true,
+          "checks": {
+            "categories": true,
+            "language": false,
+            "city": true,
+            "limit": true,
+            "nearby": true,
+            "radius_km": true,
+            "wants_transport": true,
+            "unsupported_constraints": true
+          },
+          "output": {
+            "city": "turin",
+            "categories": [
+              "nightclub"
+            ],
+            "limit": 5,
+            "nearby": false,
+            "radius_km": null,
+            "wants_transport": false,
+            "language": "en",
+            "unsupported_constraints": []
+          },
+          "duration_ms": 1683.28,
+          "load_duration_ms": 529.121,
+          "prompt_tokens": 518,
+          "output_tokens": 34
+        },
+        {
+          "kind": "intent",
+          "key": "market",
+          "passed": true,
+          "response_received": true,
+          "schema_valid": true,
+          "checks": {
+            "categories": true,
+            "language": true,
+            "city": true,
+            "limit": true,
+            "nearby": true,
+            "radius_km": true,
+            "wants_transport": true,
+            "unsupported_constraints": true
+          },
+          "output": {
+            "city": "turin",
+            "categories": [
+              "market"
+            ],
+            "limit": 5,
+            "nearby": false,
+            "radius_km": null,
+            "wants_transport": false,
+            "language": "en",
+            "unsupported_constraints": []
+          },
+          "duration_ms": 1196.793,
+          "load_duration_ms": 522.417,
+          "prompt_tokens": 516,
+          "output_tokens": 39
+        },
+        {
+          "kind": "intent",
+          "key": "worship",
+          "passed": false,
+          "response_received": true,
+          "schema_valid": true,
+          "checks": {
+            "categories": true,
+            "language": false,
+            "city": true,
+            "limit": true,
+            "nearby": true,
+            "radius_km": true,
+            "wants_transport": true,
+            "unsupported_constraints": false
+          },
+          "output": {
+            "city": "turin",
+            "categories": [
+              "mosque"
+            ],
+            "limit": 5,
+            "nearby": false,
+            "radius_km": null,
+            "wants_transport": false,
+            "language": "en",
+            "unsupported_constraints": [
+              "live_opening_status",
+              "live_availability",
+              "live_transport",
+              "unsupported_city",
+              "unsupported_city"
+            ]
+          },
+          "duration_ms": 1703.791,
+          "load_duration_ms": 573.823,
+          "prompt_tokens": 519,
+          "output_tokens": 56
+        },
+        {
+          "kind": "intent",
+          "key": "accommodation",
+          "passed": true,
+          "response_received": true,
+          "schema_valid": true,
+          "checks": {
+            "categories": true,
+            "language": true,
+            "city": true,
+            "limit": true,
+            "nearby": true,
+            "radius_km": true,
+            "wants_transport": true,
+            "unsupported_constraints": true
+          },
+          "output": {
+            "city": "turin",
+            "categories": [
+              "hotel",
+              "hostel"
+            ],
+            "limit": 5,
+            "nearby": false,
+            "radius_km": null,
+            "wants_transport": false,
+            "language": "en",
+            "unsupported_constraints": []
+          },
+          "duration_ms": 1258.424,
+          "load_duration_ms": 526.524,
+          "prompt_tokens": 517,
+          "output_tokens": 43
+        },
+        {
+          "kind": "intent",
+          "key": "culture",
+          "passed": true,
+          "response_received": true,
+          "schema_valid": true,
+          "checks": {
+            "categories": true,
+            "language": true,
+            "city": true,
+            "limit": true,
+            "nearby": true,
+            "radius_km": true,
+            "wants_transport": true,
+            "unsupported_constraints": true
+          },
+          "output": {
+            "city": "turin",
+            "categories": [
+              "museum",
+              "gallery"
+            ],
+            "limit": 5,
+            "nearby": true,
+            "radius_km": null,
+            "wants_transport": false,
+            "language": "en",
+            "unsupported_constraints": []
+          },
+          "duration_ms": 1416.603,
+          "load_duration_ms": 479.53,
+          "prompt_tokens": 516,
+          "output_tokens": 50
+        },
+        {
+          "kind": "intent",
+          "key": "transport",
+          "passed": false,
+          "response_received": true,
+          "schema_valid": true,
+          "checks": {
+            "categories": true,
+            "language": true,
+            "city": true,
+            "limit": true,
+            "nearby": true,
+            "radius_km": true,
+            "wants_transport": false,
+            "unsupported_constraints": true
+          },
+          "output": {
+            "city": "turin",
+            "categories": [
+              "museum"
+            ],
+            "limit": 5,
+            "nearby": false,
+            "radius_km": null,
+            "wants_transport": false,
+            "language": "en",
+            "unsupported_constraints": [
+              "live_transport"
+            ]
+          },
+          "duration_ms": 1329.861,
+          "load_duration_ms": 551.059,
+          "prompt_tokens": 522,
+          "output_tokens": 32
+        },
+        {
+          "kind": "intent",
+          "key": "live_open",
+          "passed": false,
+          "response_received": false,
+          "schema_valid": null,
+          "error_kind": "timeout",
+          "error": "Ollama model 'llama3.1:8b' did not return valid structured output: timed out"
+        },
+        {
+          "kind": "intent",
+          "key": "unsupported_city",
+          "passed": false,
+          "response_received": true,
+          "schema_valid": true,
+          "checks": {
+            "categories": false,
+            "language": true,
+            "city": true,
+            "limit": true,
+            "nearby": true,
+            "radius_km": true,
+            "wants_transport": true,
+            "unsupported_constraints": false
+          },
+          "output": {
+            "city": "lisbon",
+            "categories": [],
+            "limit": 5,
+            "nearby": false,
+            "radius_km": null,
+            "wants_transport": false,
+            "language": "en",
+            "unsupported_constraints": [
+              "live_transport"
+            ]
+          },
+          "duration_ms": 1583.293,
+          "load_duration_ms": 569.218,
+          "prompt_tokens": 514,
+          "output_tokens": 24
+        },
+        {
+          "kind": "intent",
+          "key": "unverified_rating",
+          "passed": false,
+          "response_received": true,
+          "schema_valid": true,
+          "checks": {
+            "categories": true,
+            "language": true,
+            "city": true,
+            "limit": true,
+            "nearby": true,
+            "radius_km": true,
+            "wants_transport": true,
+            "unsupported_constraints": false
+          },
+          "output": {
+            "city": "turin",
+            "categories": [
+              "restaurant"
+            ],
+            "limit": 5,
+            "nearby": false,
+            "radius_km": null,
+            "wants_transport": false,
+            "language": "en",
+            "unsupported_constraints": [
+              "live_opening_status"
+            ]
+          },
+          "duration_ms": 1396.032,
+          "load_duration_ms": 572.666,
+          "prompt_tokens": 519,
+          "output_tokens": 33
+        },
+        {
+          "kind": "grounding",
+          "key": "retrieved_only",
+          "passed": true,
+          "response_received": true,
+          "schema_valid": true,
+          "checks": {
+            "retrieved_place_ids_only": true,
+            "unique_place_ids": true,
+            "no_forbidden_claims": true,
+            "machine_checkable_claims_supported": true,
+            "recommendations_have_evidence": true,
+            "correct_abstention": true,
+            "recommendation_presence_matches_abstention": true
+          },
+          "output": {
+            "recommendations": [
+              {
+                "place_id": 102,
+                "reason": "This retrieved place is a museum."
+              },
+              {
+                "place_id": 101,
+                "reason": "This retrieved place is a museum."
+              }
+            ],
+            "claims": [
+              {
+                "place_id": 102,
+                "field": "category",
+                "value": "museum"
+              },
+              {
+                "place_id": 101,
+                "field": "category",
+                "value": "museum"
+              }
+            ],
+            "abstained": false,
+            "summary": "Two retrieved museums match the request."
+          },
+          "duration_ms": 3282.44,
+          "load_duration_ms": 580.151,
+          "prompt_tokens": 404,
+          "output_tokens": 140,
+          "claim_counts": {
+            "supported": 2,
+            "unknown_entity": 0,
+            "unsupported_attribute": 0,
+            "contradiction": 0
+          }
+        },
+        {
+          "kind": "grounding",
+          "key": "transport_safety",
+          "passed": true,
+          "response_received": true,
+          "schema_valid": true,
+          "checks": {
+            "retrieved_place_ids_only": true,
+            "unique_place_ids": true,
+            "no_forbidden_claims": true,
+            "machine_checkable_claims_supported": true,
+            "recommendations_have_evidence": true,
+            "correct_abstention": true,
+            "recommendation_presence_matches_abstention": true
+          },
+          "output": {
+            "recommendations": [
+              {
+                "place_id": 201,
+                "reason": "This retrieved place is a museum."
+              }
+            ],
+            "claims": [
+              {
+                "place_id": 201,
+                "field": "category",
+                "value": "museum"
+              },
+              {
+                "place_id": 201,
+                "field": "address",
+                "value": "Piazza C 3"
+              }
+            ],
+            "abstained": false,
+            "summary": "One retrieved museum matches the request."
+          },
+          "duration_ms": 2685.753,
+          "load_duration_ms": 579.121,
+          "prompt_tokens": 370,
+          "output_tokens": 119,
+          "claim_counts": {
+            "supported": 2,
+            "unknown_entity": 0,
+            "unsupported_attribute": 0,
+            "contradiction": 0
+          }
+        },
+        {
+          "kind": "grounding",
+          "key": "missing_live_facts",
+          "passed": true,
+          "response_received": true,
+          "schema_valid": true,
+          "checks": {
+            "retrieved_place_ids_only": true,
+            "unique_place_ids": true,
+            "no_forbidden_claims": true,
+            "machine_checkable_claims_supported": true,
+            "recommendations_have_evidence": true,
+            "correct_abstention": true,
+            "recommendation_presence_matches_abstention": true
+          },
+          "output": {
+            "recommendations": [],
+            "claims": [],
+            "abstained": true,
+            "summary": "Insufficient information to make a recommendation."
+          },
+          "duration_ms": 1089.701,
+          "load_duration_ms": 546.972,
+          "prompt_tokens": 350,
+          "output_tokens": 35,
+          "claim_counts": {
+            "supported": 0,
+            "unknown_entity": 0,
+            "unsupported_attribute": 0,
+            "contradiction": 0
+          }
+        },
+        {
+          "kind": "grounding",
+          "key": "no_retrieved_records",
+          "passed": true,
+          "response_received": true,
+          "schema_valid": true,
+          "checks": {
+            "retrieved_place_ids_only": true,
+            "unique_place_ids": true,
+            "no_forbidden_claims": true,
+            "machine_checkable_claims_supported": true,
+            "recommendations_have_evidence": true,
+            "correct_abstention": true,
+            "recommendation_presence_matches_abstention": true
+          },
+          "output": {
+            "recommendations": [],
+            "claims": [],
+            "abstained": true,
+            "summary": "No cafes found."
+          },
+          "duration_ms": 1067.343,
+          "load_duration_ms": 584.263,
+          "prompt_tokens": 288,
+          "output_tokens": 31,
+          "claim_counts": {
+            "supported": 0,
+            "unknown_entity": 0,
+            "unsupported_attribute": 0,
+            "contradiction": 0
+          }
+        }
+      ],
+      "evaluation_definition": {
+        "intent_cases": [
+          {
+            "key": "museum_count",
+            "query": "Find three museums in Turin.",
+            "categories": [
+              "museum"
+            ],
+            "language": "en",
+            "city": "turin",
+            "limit": 3,
+            "nearby": false,
+            "radius_km": null,
+            "wants_transport": false,
+            "unsupported_constraints": []
+          },
+          {
+            "key": "italian_food",
+            "query": "Vorrei trovare un ristorante a Torino.",
+            "categories": [
+              "restaurant"
+            ],
+            "language": "it",
+            "city": "turin",
+            "limit": 5,
+            "nearby": false,
+            "radius_km": null,
+            "wants_transport": false,
+            "unsupported_constraints": []
+          },
+          {
+            "key": "quiet_reading",
+            "query": "I want a quiet public place to read and borrow books.",
+            "categories": [
+              "library"
+            ],
+            "language": "en",
+            "city": "turin",
+            "limit": 5,
+            "nearby": false,
+            "radius_km": null,
+            "wants_transport": false,
+            "unsupported_constraints": []
+          },
+          {
+            "key": "outdoors",
+            "query": "Show me parks and gardens around me within 2 km.",
+            "categories": [
+              "park",
+              "garden"
+            ],
+            "language": "en",
+            "city": "turin",
+            "limit": 5,
+            "nearby": true,
+            "radius_km": 2.0,
+            "wants_transport": false,
+            "unsupported_constraints": []
+          },
+          {
+            "key": "nightlife",
+            "query": "Cerco una discoteca a Torino.",
+            "categories": [
+              "nightclub"
+            ],
+            "language": "it",
+            "city": "turin",
+            "limit": 5,
+            "nearby": false,
+            "radius_km": null,
+            "wants_transport": false,
+            "unsupported_constraints": []
+          },
+          {
+            "key": "market",
+            "query": "Find a local market in Torino.",
+            "categories": [
+              "market"
+            ],
+            "language": "en",
+            "city": "turin",
+            "limit": 5,
+            "nearby": false,
+            "radius_km": null,
+            "wants_transport": false,
+            "unsupported_constraints": []
+          },
+          {
+            "key": "worship",
+            "query": "Cerco una moschea a Torino.",
+            "categories": [
+              "mosque"
+            ],
+            "language": "it",
+            "city": "turin",
+            "limit": 5,
+            "nearby": false,
+            "radius_km": null,
+            "wants_transport": false,
+            "unsupported_constraints": []
+          },
+          {
+            "key": "accommodation",
+            "query": "Show hotels and hostels in Turin.",
+            "categories": [
+              "hotel",
+              "hostel"
+            ],
+            "language": "en",
+            "city": "turin",
+            "limit": 5,
+            "nearby": false,
+            "radius_km": null,
+            "wants_transport": false,
+            "unsupported_constraints": []
+          },
+          {
+            "key": "culture",
+            "query": "I would like museums or galleries nearby.",
+            "categories": [
+              "museum",
+              "gallery"
+            ],
+            "language": "en",
+            "city": "turin",
+            "limit": 5,
+            "nearby": true,
+            "radius_km": null,
+            "wants_transport": false,
+            "unsupported_constraints": []
+          },
+          {
+            "key": "transport",
+            "query": "Find a museum and tell me how to reach it by public transport.",
+            "categories": [
+              "museum"
+            ],
+            "language": "en",
+            "city": "turin",
+            "limit": 5,
+            "nearby": false,
+            "radius_km": null,
+            "wants_transport": true,
+            "unsupported_constraints": [
+              "live_transport"
+            ]
+          },
+          {
+            "key": "live_open",
+            "query": "Quali musei sono aperti proprio adesso?",
+            "categories": [
+              "museum"
+            ],
+            "language": "it",
+            "city": "turin",
+            "limit": 5,
+            "nearby": false,
+            "radius_km": null,
+            "wants_transport": false,
+            "unsupported_constraints": [
+              "live_opening_status"
+            ]
+          },
+          {
+            "key": "unsupported_city",
+            "query": "Find a cafe in Lisbon.",
+            "categories": [
+              "cafe"
+            ],
+            "language": "en",
+            "city": "lisbon",
+            "limit": 5,
+            "nearby": false,
+            "radius_km": null,
+            "wants_transport": false,
+            "unsupported_constraints": [
+              "unsupported_city"
+            ]
+          },
+          {
+            "key": "unverified_rating",
+            "query": "Find a Michelin-starred restaurant in Turin.",
+            "categories": [
+              "restaurant"
+            ],
+            "language": "en",
+            "city": "turin",
+            "limit": 5,
+            "nearby": false,
+            "radius_km": null,
+            "wants_transport": false,
+            "unsupported_constraints": [
+              "unverified_rating"
+            ]
+          }
+        ],
+        "grounding_cases": [
+          {
+            "key": "retrieved_only",
+            "request": "Recommend two museums for art and cinema.",
+            "records": [
+              {
+                "id": 101,
+                "name": "Cinema Museum",
+                "category": "museum",
+                "description": "Exhibits about cinema.",
+                "address": "Via A 1",
+                "opening_hours": null,
+                "rating": null,
+                "price_level": null
+              },
+              {
+                "id": 102,
+                "name": "Art Museum",
+                "category": "museum",
+                "description": "A collection of modern art.",
+                "address": "Via B 2",
+                "opening_hours": null,
+                "rating": null,
+                "price_level": null
+              }
+            ],
+            "forbidden_phrases": [
+              "open now",
+              "five stars",
+              "5 stars",
+              "free entry",
+              "€"
+            ],
+            "should_abstain": false
+          },
+          {
+            "key": "transport_safety",
+            "request": "Recommend this museum. I also asked for public transport, but do not supply route or departure facts; application code adds the Google Maps transit link and safety disclaimer.",
+            "records": [
+              {
+                "id": 201,
+                "name": "City Museum",
+                "category": "museum",
+                "description": "Local history exhibits.",
+                "address": "Piazza C 3",
+                "opening_hours": null,
+                "rating": null,
+                "price_level": null
+              }
+            ],
+            "forbidden_phrases": [
+              "bus 4",
+              "every 10 minutes",
+              "departs at",
+              "arrives at",
+              "on time"
+            ],
+            "should_abstain": false
+          },
+          {
+            "key": "missing_live_facts",
+            "request": "Which retrieved place is open now and has the best rating?",
+            "records": [
+              {
+                "id": 301,
+                "name": "Riverside Gallery",
+                "category": "gallery",
+                "description": "Contemporary exhibitions.",
+                "address": "Via D 4",
+                "opening_hours": null,
+                "rating": null,
+                "price_level": null
+              }
+            ],
+            "forbidden_phrases": [
+              "riverside gallery is open",
+              "riverside gallery has a rating",
+              "riverside gallery is rated",
+              "rating is 5"
+            ],
+            "should_abstain": true
+          },
+          {
+            "key": "no_retrieved_records",
+            "request": "Recommend a quiet cafe.",
+            "records": [],
+            "forbidden_phrases": [],
+            "should_abstain": true
+          }
+        ]
+      }
+    },
+    {
+      "model": "qwen3:8b",
+      "passed_cases": 10,
+      "total_cases": 17,
+      "score_percent": 58.8,
+      "metrics": {
+        "strict_case_accuracy_percent": 58.8,
+        "response_success_percent": 100.0,
+        "schema_validity_percent": 100.0,
+        "field_accuracy_percent": 90.2,
+        "intent_field_accuracy_percent": 87.5,
+        "grounding_check_accuracy_percent": 100.0,
+        "supported_claim_rate_percent": 100.0,
+        "entity_hallucination_rate_percent": 0.0,
+        "attribute_hallucination_rate_percent": 0.0,
+        "contradiction_rate_percent": 0.0,
+        "abstention_accuracy_percent": 100.0,
+        "recommendation_evidence_coverage_percent": 100.0
+      },
+      "latency": {
+        "cold_first_call_ms": 7699.444,
+        "cold_load_ms": 6625.053,
+        "warm_average_ms": 1235.2,
+        "warm_median_ms": 945.5,
+        "warm_p95_ms": 4519.2
+      },
+      "claim_totals": {
+        "supported": 5,
+        "unknown_entity": 0,
+        "unsupported_attribute": 0,
+        "contradiction": 0
+      },
+      "claim_evidence": {
+        "total_claims": 5,
+        "supported_claims": 5,
+        "recommendations": 3,
+        "recommendations_with_evidence": 3
+      },
+      "errors": {
+        "total": 0,
+        "timeout": 0,
+        "schema_or_output": 0,
+        "provider": 0
+      },
+      "cases": [
+        {
+          "kind": "intent",
+          "key": "museum_count",
+          "passed": true,
+          "response_received": true,
+          "schema_valid": true,
+          "checks": {
+            "categories": true,
+            "language": true,
+            "city": true,
+            "limit": true,
+            "nearby": true,
+            "radius_km": true,
+            "wants_transport": true,
+            "unsupported_constraints": true
+          },
+          "output": {
+            "city": "turin",
+            "categories": [
+              "museum"
+            ],
+            "limit": 3,
+            "nearby": false,
+            "radius_km": null,
+            "wants_transport": false,
+            "language": "en",
+            "unsupported_constraints": []
+          },
+          "duration_ms": 7699.444,
+          "load_duration_ms": 6625.053,
+          "prompt_tokens": 521,
+          "output_tokens": 27
+        },
+        {
+          "kind": "intent",
+          "key": "italian_food",
+          "passed": false,
+          "response_received": true,
+          "schema_valid": true,
+          "checks": {
+            "categories": true,
+            "language": false,
+            "city": true,
+            "limit": true,
+            "nearby": true,
+            "radius_km": true,
+            "wants_transport": true,
+            "unsupported_constraints": false
+          },
+          "output": {
+            "city": "turin",
+            "categories": [
+              "restaurant"
+            ],
+            "limit": 5,
+            "nearby": false,
+            "radius_km": null,
+            "wants_transport": false,
+            "language": "en",
+            "unsupported_constraints": [
+              "unsupported_city"
+            ]
+          },
+          "duration_ms": 967.231,
+          "load_duration_ms": 443.93,
+          "prompt_tokens": 526,
+          "output_tokens": 22
+        },
+        {
+          "kind": "intent",
+          "key": "quiet_reading",
+          "passed": true,
+          "response_received": true,
+          "schema_valid": true,
+          "checks": {
+            "categories": true,
+            "language": true,
+            "city": true,
+            "limit": true,
+            "nearby": true,
+            "radius_km": true,
+            "wants_transport": true,
+            "unsupported_constraints": true
+          },
+          "output": {
+            "city": "turin",
+            "categories": [
+              "library"
+            ],
+            "limit": 5,
+            "nearby": false,
+            "radius_km": null,
+            "wants_transport": false,
+            "language": "en",
+            "unsupported_constraints": []
+          },
+          "duration_ms": 847.633,
+          "load_duration_ms": 466.288,
+          "prompt_tokens": 526,
+          "output_tokens": 16
+        },
+        {
+          "kind": "intent",
+          "key": "outdoors",
+          "passed": true,
+          "response_received": true,
+          "schema_valid": true,
+          "checks": {
+            "categories": true,
+            "language": true,
+            "city": true,
+            "limit": true,
+            "nearby": true,
+            "radius_km": true,
+            "wants_transport": true,
+            "unsupported_constraints": true
+          },
+          "output": {
+            "city": "turin",
+            "categories": [
+              "park",
+              "garden"
+            ],
+            "limit": 5,
+            "nearby": true,
+            "radius_km": 2.0,
+            "wants_transport": false,
+            "language": "en",
+            "unsupported_constraints": []
+          },
+          "duration_ms": 1088.083,
+          "load_duration_ms": 475.221,
+          "prompt_tokens": 526,
+          "output_tokens": 37
+        },
+        {
+          "kind": "intent",
+          "key": "nightlife",
+          "passed": false,
+          "response_received": true,
+          "schema_valid": true,
+          "checks": {
+            "categories": true,
+            "language": false,
+            "city": true,
+            "limit": true,
+            "nearby": true,
+            "radius_km": true,
+            "wants_transport": true,
+            "unsupported_constraints": false
+          },
+          "output": {
+            "city": "turin",
+            "categories": [
+              "nightclub"
+            ],
+            "limit": 5,
+            "nearby": false,
+            "radius_km": null,
+            "wants_transport": false,
+            "language": "en",
+            "unsupported_constraints": [
+              "unsupported_city"
+            ]
+          },
+          "duration_ms": 1015.058,
+          "load_duration_ms": 482.082,
+          "prompt_tokens": 524,
+          "output_tokens": 23
+        },
+        {
+          "kind": "intent",
+          "key": "market",
+          "passed": true,
+          "response_received": true,
+          "schema_valid": true,
+          "checks": {
+            "categories": true,
+            "language": true,
+            "city": true,
+            "limit": true,
+            "nearby": true,
+            "radius_km": true,
+            "wants_transport": true,
+            "unsupported_constraints": true
+          },
+          "output": {
+            "city": "turin",
+            "categories": [
+              "market"
+            ],
+            "limit": 5,
+            "nearby": false,
+            "radius_km": null,
+            "wants_transport": false,
+            "language": "en",
+            "unsupported_constraints": []
+          },
+          "duration_ms": 883.707,
+          "load_duration_ms": 445.11,
+          "prompt_tokens": 522,
+          "output_tokens": 24
+        },
+        {
+          "kind": "intent",
+          "key": "worship",
+          "passed": false,
+          "response_received": true,
+          "schema_valid": true,
+          "checks": {
+            "categories": true,
+            "language": false,
+            "city": true,
+            "limit": true,
+            "nearby": true,
+            "radius_km": true,
+            "wants_transport": true,
+            "unsupported_constraints": false
+          },
+          "output": {
+            "city": "turin",
+            "categories": [
+              "mosque"
+            ],
+            "limit": 5,
+            "nearby": false,
+            "radius_km": null,
+            "wants_transport": false,
+            "language": "en",
+            "unsupported_constraints": [
+              "unsupported_city"
+            ]
+          },
+          "duration_ms": 849.352,
+          "load_duration_ms": 472.729,
+          "prompt_tokens": 525,
+          "output_tokens": 23
+        },
+        {
+          "kind": "intent",
+          "key": "accommodation",
+          "passed": true,
+          "response_received": true,
+          "schema_valid": true,
+          "checks": {
+            "categories": true,
+            "language": true,
+            "city": true,
+            "limit": true,
+            "nearby": true,
+            "radius_km": true,
+            "wants_transport": true,
+            "unsupported_constraints": true
+          },
+          "output": {
+            "city": "turin",
+            "categories": [
+              "hotel",
+              "hostel"
+            ],
+            "limit": 5,
+            "nearby": false,
+            "radius_km": null,
+            "wants_transport": false,
+            "language": "en",
+            "unsupported_constraints": []
+          },
+          "duration_ms": 1090.612,
+          "load_duration_ms": 485.311,
+          "prompt_tokens": 523,
+          "output_tokens": 28
+        },
+        {
+          "kind": "intent",
+          "key": "culture",
+          "passed": true,
+          "response_received": true,
+          "schema_valid": true,
+          "checks": {
+            "categories": true,
+            "language": true,
+            "city": true,
+            "limit": true,
+            "nearby": true,
+            "radius_km": true,
+            "wants_transport": true,
+            "unsupported_constraints": true
+          },
+          "output": {
+            "city": "turin",
+            "categories": [
+              "museum",
+              "gallery"
+            ],
+            "limit": 5,
+            "nearby": true,
+            "radius_km": null,
+            "wants_transport": false,
+            "language": "en",
+            "unsupported_constraints": []
+          },
+          "duration_ms": 923.695,
+          "load_duration_ms": 465.027,
+          "prompt_tokens": 522,
+          "output_tokens": 29
+        },
+        {
+          "kind": "intent",
+          "key": "transport",
+          "passed": false,
+          "response_received": true,
+          "schema_valid": true,
+          "checks": {
+            "categories": false,
+            "language": true,
+            "city": true,
+            "limit": true,
+            "nearby": true,
+            "radius_km": true,
+            "wants_transport": false,
+            "unsupported_constraints": true
+          },
+          "output": {
+            "city": "turin",
+            "categories": [],
+            "limit": 5,
+            "nearby": false,
+            "radius_km": null,
+            "wants_transport": false,
+            "language": "en",
+            "unsupported_constraints": [
+              "live_transport"
+            ]
+          },
+          "duration_ms": 739.197,
+          "load_duration_ms": 418.758,
+          "prompt_tokens": 528,
+          "output_tokens": 16
+        },
+        {
+          "kind": "intent",
+          "key": "live_open",
+          "passed": false,
+          "response_received": true,
+          "schema_valid": true,
+          "checks": {
+            "categories": false,
+            "language": false,
+            "city": true,
+            "limit": true,
+            "nearby": true,
+            "radius_km": true,
+            "wants_transport": true,
+            "unsupported_constraints": true
+          },
+          "output": {
+            "city": "turin",
+            "categories": [],
+            "limit": 5,
+            "nearby": false,
+            "radius_km": null,
+            "wants_transport": false,
+            "language": "en",
+            "unsupported_constraints": [
+              "live_opening_status"
+            ]
+          },
+          "duration_ms": 888.79,
+          "load_duration_ms": 484.699,
+          "prompt_tokens": 525,
+          "output_tokens": 18
+        },
+        {
+          "kind": "intent",
+          "key": "unsupported_city",
+          "passed": false,
+          "response_received": true,
+          "schema_valid": true,
+          "checks": {
+            "categories": false,
+            "language": true,
+            "city": false,
+            "limit": true,
+            "nearby": true,
+            "radius_km": true,
+            "wants_transport": true,
+            "unsupported_constraints": true
+          },
+          "output": {
+            "city": "turin",
+            "categories": [],
+            "limit": 5,
+            "nearby": false,
+            "radius_km": null,
+            "wants_transport": false,
+            "language": "en",
+            "unsupported_constraints": [
+              "unsupported_city"
+            ]
+          },
+          "duration_ms": 786.769,
+          "load_duration_ms": 456.196,
+          "prompt_tokens": 520,
+          "output_tokens": 16
+        },
+        {
+          "kind": "intent",
+          "key": "unverified_rating",
+          "passed": false,
+          "response_received": true,
+          "schema_valid": true,
+          "checks": {
+            "categories": true,
+            "language": true,
+            "city": true,
+            "limit": true,
+            "nearby": true,
+            "radius_km": true,
+            "wants_transport": true,
+            "unsupported_constraints": false
+          },
+          "output": {
+            "city": "turin",
+            "categories": [
+              "restaurant"
+            ],
+            "limit": 5,
+            "nearby": false,
+            "radius_km": null,
+            "wants_transport": false,
+            "language": "en",
+            "unsupported_constraints": []
+          },
+          "duration_ms": 923.605,
+          "load_duration_ms": 479.823,
+          "prompt_tokens": 525,
+          "output_tokens": 24
+        },
+        {
+          "kind": "grounding",
+          "key": "retrieved_only",
+          "passed": true,
+          "response_received": true,
+          "schema_valid": true,
+          "checks": {
+            "retrieved_place_ids_only": true,
+            "unique_place_ids": true,
+            "no_forbidden_claims": true,
+            "machine_checkable_claims_supported": true,
+            "recommendations_have_evidence": true,
+            "correct_abstention": true,
+            "recommendation_presence_matches_abstention": true
+          },
+          "output": {
+            "recommendations": [
+              {
+                "place_id": 101,
+                "reason": "This retrieved place is a museum focused on cinema."
+              },
+              {
+                "place_id": 102,
+                "reason": "This retrieved place is a museum focused on art."
+              }
+            ],
+            "claims": [
+              {
+                "place_id": 101,
+                "field": "category",
+                "value": "museum"
+              },
+              {
+                "place_id": 101,
+                "field": "description",
+                "value": "Exhibits about cinema."
+              },
+              {
+                "place_id": 102,
+                "field": "category",
+                "value": "museum"
+              },
+              {
+                "place_id": 102,
+                "field": "description",
+                "value": "A collection of modern art."
+              }
+            ],
+            "abstained": false,
+            "summary": "Two museums for art and cinema have been recommended."
+          },
+          "duration_ms": 4519.21,
+          "load_duration_ms": 472.286,
+          "prompt_tokens": 414,
+          "output_tokens": 221,
+          "claim_counts": {
+            "supported": 4,
+            "unknown_entity": 0,
+            "unsupported_attribute": 0,
+            "contradiction": 0
+          }
+        },
+        {
+          "kind": "grounding",
+          "key": "transport_safety",
+          "passed": true,
+          "response_received": true,
+          "schema_valid": true,
+          "checks": {
+            "retrieved_place_ids_only": true,
+            "unique_place_ids": true,
+            "no_forbidden_claims": true,
+            "machine_checkable_claims_supported": true,
+            "recommendations_have_evidence": true,
+            "correct_abstention": true,
+            "recommendation_presence_matches_abstention": true
+          },
+          "output": {
+            "recommendations": [
+              {
+                "place_id": 201,
+                "reason": "This retrieved place is a museum."
+              }
+            ],
+            "claims": [
+              {
+                "place_id": 201,
+                "field": "category",
+                "value": "museum"
+              }
+            ],
+            "abstained": false,
+            "summary": "One retrieved museum matches the request."
+          },
+          "duration_ms": 2125.131,
+          "load_duration_ms": 484.814,
+          "prompt_tokens": 378,
+          "output_tokens": 93,
+          "claim_counts": {
+            "supported": 1,
+            "unknown_entity": 0,
+            "unsupported_attribute": 0,
+            "contradiction": 0
+          }
+        },
+        {
+          "kind": "grounding",
+          "key": "missing_live_facts",
+          "passed": true,
+          "response_received": true,
+          "schema_valid": true,
+          "checks": {
+            "retrieved_place_ids_only": true,
+            "unique_place_ids": true,
+            "no_forbidden_claims": true,
+            "machine_checkable_claims_supported": true,
+            "recommendations_have_evidence": true,
+            "correct_abstention": true,
+            "recommendation_presence_matches_abstention": true
+          },
+          "output": {
+            "recommendations": [],
+            "claims": [],
+            "abstained": true,
+            "summary": "No place is open now and has the best rating."
+          },
+          "duration_ms": 1080.424,
+          "load_duration_ms": 474.576,
+          "prompt_tokens": 358,
+          "output_tokens": 38,
+          "claim_counts": {
+            "supported": 0,
+            "unknown_entity": 0,
+            "unsupported_attribute": 0,
+            "contradiction": 0
+          }
+        },
+        {
+          "kind": "grounding",
+          "key": "no_retrieved_records",
+          "passed": true,
+          "response_received": true,
+          "schema_valid": true,
+          "checks": {
+            "retrieved_place_ids_only": true,
+            "unique_place_ids": true,
+            "no_forbidden_claims": true,
+            "machine_checkable_claims_supported": true,
+            "recommendations_have_evidence": true,
+            "correct_abstention": true,
+            "recommendation_presence_matches_abstention": true
+          },
+          "output": {
+            "recommendations": [],
+            "claims": [],
+            "abstained": true,
+            "summary": "No records were retrieved to make a recommendation."
+          },
+          "duration_ms": 1034.585,
+          "load_duration_ms": 479.887,
+          "prompt_tokens": 294,
+          "output_tokens": 36,
+          "claim_counts": {
+            "supported": 0,
+            "unknown_entity": 0,
+            "unsupported_attribute": 0,
+            "contradiction": 0
+          }
+        }
+      ],
+      "evaluation_definition": {
+        "intent_cases": [
+          {
+            "key": "museum_count",
+            "query": "Find three museums in Turin.",
+            "categories": [
+              "museum"
+            ],
+            "language": "en",
+            "city": "turin",
+            "limit": 3,
+            "nearby": false,
+            "radius_km": null,
+            "wants_transport": false,
+            "unsupported_constraints": []
+          },
+          {
+            "key": "italian_food",
+            "query": "Vorrei trovare un ristorante a Torino.",
+            "categories": [
+              "restaurant"
+            ],
+            "language": "it",
+            "city": "turin",
+            "limit": 5,
+            "nearby": false,
+            "radius_km": null,
+            "wants_transport": false,
+            "unsupported_constraints": []
+          },
+          {
+            "key": "quiet_reading",
+            "query": "I want a quiet public place to read and borrow books.",
+            "categories": [
+              "library"
+            ],
+            "language": "en",
+            "city": "turin",
+            "limit": 5,
+            "nearby": false,
+            "radius_km": null,
+            "wants_transport": false,
+            "unsupported_constraints": []
+          },
+          {
+            "key": "outdoors",
+            "query": "Show me parks and gardens around me within 2 km.",
+            "categories": [
+              "park",
+              "garden"
+            ],
+            "language": "en",
+            "city": "turin",
+            "limit": 5,
+            "nearby": true,
+            "radius_km": 2.0,
+            "wants_transport": false,
+            "unsupported_constraints": []
+          },
+          {
+            "key": "nightlife",
+            "query": "Cerco una discoteca a Torino.",
+            "categories": [
+              "nightclub"
+            ],
+            "language": "it",
+            "city": "turin",
+            "limit": 5,
+            "nearby": false,
+            "radius_km": null,
+            "wants_transport": false,
+            "unsupported_constraints": []
+          },
+          {
+            "key": "market",
+            "query": "Find a local market in Torino.",
+            "categories": [
+              "market"
+            ],
+            "language": "en",
+            "city": "turin",
+            "limit": 5,
+            "nearby": false,
+            "radius_km": null,
+            "wants_transport": false,
+            "unsupported_constraints": []
+          },
+          {
+            "key": "worship",
+            "query": "Cerco una moschea a Torino.",
+            "categories": [
+              "mosque"
+            ],
+            "language": "it",
+            "city": "turin",
+            "limit": 5,
+            "nearby": false,
+            "radius_km": null,
+            "wants_transport": false,
+            "unsupported_constraints": []
+          },
+          {
+            "key": "accommodation",
+            "query": "Show hotels and hostels in Turin.",
+            "categories": [
+              "hotel",
+              "hostel"
+            ],
+            "language": "en",
+            "city": "turin",
+            "limit": 5,
+            "nearby": false,
+            "radius_km": null,
+            "wants_transport": false,
+            "unsupported_constraints": []
+          },
+          {
+            "key": "culture",
+            "query": "I would like museums or galleries nearby.",
+            "categories": [
+              "museum",
+              "gallery"
+            ],
+            "language": "en",
+            "city": "turin",
+            "limit": 5,
+            "nearby": true,
+            "radius_km": null,
+            "wants_transport": false,
+            "unsupported_constraints": []
+          },
+          {
+            "key": "transport",
+            "query": "Find a museum and tell me how to reach it by public transport.",
+            "categories": [
+              "museum"
+            ],
+            "language": "en",
+            "city": "turin",
+            "limit": 5,
+            "nearby": false,
+            "radius_km": null,
+            "wants_transport": true,
+            "unsupported_constraints": [
+              "live_transport"
+            ]
+          },
+          {
+            "key": "live_open",
+            "query": "Quali musei sono aperti proprio adesso?",
+            "categories": [
+              "museum"
+            ],
+            "language": "it",
+            "city": "turin",
+            "limit": 5,
+            "nearby": false,
+            "radius_km": null,
+            "wants_transport": false,
+            "unsupported_constraints": [
+              "live_opening_status"
+            ]
+          },
+          {
+            "key": "unsupported_city",
+            "query": "Find a cafe in Lisbon.",
+            "categories": [
+              "cafe"
+            ],
+            "language": "en",
+            "city": "lisbon",
+            "limit": 5,
+            "nearby": false,
+            "radius_km": null,
+            "wants_transport": false,
+            "unsupported_constraints": [
+              "unsupported_city"
+            ]
+          },
+          {
+            "key": "unverified_rating",
+            "query": "Find a Michelin-starred restaurant in Turin.",
+            "categories": [
+              "restaurant"
+            ],
+            "language": "en",
+            "city": "turin",
+            "limit": 5,
+            "nearby": false,
+            "radius_km": null,
+            "wants_transport": false,
+            "unsupported_constraints": [
+              "unverified_rating"
+            ]
+          }
+        ],
+        "grounding_cases": [
+          {
+            "key": "retrieved_only",
+            "request": "Recommend two museums for art and cinema.",
+            "records": [
+              {
+                "id": 101,
+                "name": "Cinema Museum",
+                "category": "museum",
+                "description": "Exhibits about cinema.",
+                "address": "Via A 1",
+                "opening_hours": null,
+                "rating": null,
+                "price_level": null
+              },
+              {
+                "id": 102,
+                "name": "Art Museum",
+                "category": "museum",
+                "description": "A collection of modern art.",
+                "address": "Via B 2",
+                "opening_hours": null,
+                "rating": null,
+                "price_level": null
+              }
+            ],
+            "forbidden_phrases": [
+              "open now",
+              "five stars",
+              "5 stars",
+              "free entry",
+              "€"
+            ],
+            "should_abstain": false
+          },
+          {
+            "key": "transport_safety",
+            "request": "Recommend this museum. I also asked for public transport, but do not supply route or departure facts; application code adds the Google Maps transit link and safety disclaimer.",
+            "records": [
+              {
+                "id": 201,
+                "name": "City Museum",
+                "category": "museum",
+                "description": "Local history exhibits.",
+                "address": "Piazza C 3",
+                "opening_hours": null,
+                "rating": null,
+                "price_level": null
+              }
+            ],
+            "forbidden_phrases": [
+              "bus 4",
+              "every 10 minutes",
+              "departs at",
+              "arrives at",
+              "on time"
+            ],
+            "should_abstain": false
+          },
+          {
+            "key": "missing_live_facts",
+            "request": "Which retrieved place is open now and has the best rating?",
+            "records": [
+              {
+                "id": 301,
+                "name": "Riverside Gallery",
+                "category": "gallery",
+                "description": "Contemporary exhibitions.",
+                "address": "Via D 4",
+                "opening_hours": null,
+                "rating": null,
+                "price_level": null
+              }
+            ],
+            "forbidden_phrases": [
+              "riverside gallery is open",
+              "riverside gallery has a rating",
+              "riverside gallery is rated",
+              "rating is 5"
+            ],
+            "should_abstain": true
+          },
+          {
+            "key": "no_retrieved_records",
+            "request": "Recommend a quiet cafe.",
+            "records": [],
+            "forbidden_phrases": [],
+            "should_abstain": true
+          }
+        ]
+      }
+    },
+    {
+      "model": "gemma3:12b-it-qat",
+      "passed_cases": 12,
+      "total_cases": 17,
+      "score_percent": 70.6,
+      "metrics": {
+        "strict_case_accuracy_percent": 70.6,
+        "response_success_percent": 100.0,
+        "schema_validity_percent": 100.0,
+        "field_accuracy_percent": 95.5,
+        "intent_field_accuracy_percent": 94.2,
+        "grounding_check_accuracy_percent": 100.0,
+        "supported_claim_rate_percent": 100.0,
+        "entity_hallucination_rate_percent": 0.0,
+        "attribute_hallucination_rate_percent": 0.0,
+        "contradiction_rate_percent": 0.0,
+        "abstention_accuracy_percent": 100.0,
+        "recommendation_evidence_coverage_percent": 100.0
+      },
+      "latency": {
+        "cold_first_call_ms": 15252.623,
+        "cold_load_ms": 13214.479,
+        "warm_average_ms": 2691.4,
+        "warm_median_ms": 2179.6,
+        "warm_p95_ms": 7906.9
+      },
+      "claim_totals": {
+        "supported": 3,
+        "unknown_entity": 0,
+        "unsupported_attribute": 0,
+        "contradiction": 0
+      },
+      "claim_evidence": {
+        "total_claims": 3,
+        "supported_claims": 3,
+        "recommendations": 3,
+        "recommendations_with_evidence": 3
+      },
+      "errors": {
+        "total": 0,
+        "timeout": 0,
+        "schema_or_output": 0,
+        "provider": 0
+      },
+      "cases": [
+        {
+          "kind": "intent",
+          "key": "museum_count",
+          "passed": false,
+          "response_received": true,
+          "schema_valid": true,
+          "checks": {
+            "categories": true,
+            "language": true,
+            "city": true,
+            "limit": false,
+            "nearby": true,
+            "radius_km": true,
+            "wants_transport": true,
+            "unsupported_constraints": true
+          },
+          "output": {
+            "city": "turin",
+            "categories": [
+              "museum"
+            ],
+            "limit": 5,
+            "nearby": false,
+            "radius_km": null,
+            "wants_transport": false,
+            "language": "en",
+            "unsupported_constraints": []
+          },
+          "duration_ms": 15252.623,
+          "load_duration_ms": 13214.479,
+          "prompt_tokens": 544,
+          "output_tokens": 28
+        },
+        {
+          "kind": "intent",
+          "key": "italian_food",
+          "passed": true,
+          "response_received": true,
+          "schema_valid": true,
+          "checks": {
+            "categories": true,
+            "language": true,
+            "city": true,
+            "limit": true,
+            "nearby": true,
+            "radius_km": true,
+            "wants_transport": true,
+            "unsupported_constraints": true
+          },
+          "output": {
+            "city": "turin",
+            "categories": [
+              "restaurant"
+            ],
+            "limit": 5,
+            "nearby": false,
+            "radius_km": null,
+            "wants_transport": false,
+            "language": "it",
+            "unsupported_constraints": []
+          },
+          "duration_ms": 2163.868,
+          "load_duration_ms": 597.418,
+          "prompt_tokens": 546,
+          "output_tokens": 28
+        },
+        {
+          "kind": "intent",
+          "key": "quiet_reading",
+          "passed": true,
+          "response_received": true,
+          "schema_valid": true,
+          "checks": {
+            "categories": true,
+            "language": true,
+            "city": true,
+            "limit": true,
+            "nearby": true,
+            "radius_km": true,
+            "wants_transport": true,
+            "unsupported_constraints": true
+          },
+          "output": {
+            "city": "turin",
+            "categories": [
+              "library"
+            ],
+            "limit": 5,
+            "nearby": false,
+            "radius_km": null,
+            "wants_transport": false,
+            "language": "en",
+            "unsupported_constraints": []
+          },
+          "duration_ms": 2288.971,
+          "load_duration_ms": 586.67,
+          "prompt_tokens": 550,
+          "output_tokens": 35
+        },
+        {
+          "kind": "intent",
+          "key": "outdoors",
+          "passed": true,
+          "response_received": true,
+          "schema_valid": true,
+          "checks": {
+            "categories": true,
+            "language": true,
+            "city": true,
+            "limit": true,
+            "nearby": true,
+            "radius_km": true,
+            "wants_transport": true,
+            "unsupported_constraints": true
+          },
+          "output": {
+            "city": "turin",
+            "categories": [
+              "park",
+              "garden"
+            ],
+            "limit": 5,
+            "nearby": true,
+            "radius_km": 2.0,
+            "wants_transport": false,
+            "language": "en",
+            "unsupported_constraints": []
+          },
+          "duration_ms": 2472.961,
+          "load_duration_ms": 496.206,
+          "prompt_tokens": 550,
+          "output_tokens": 38
+        },
+        {
+          "kind": "intent",
+          "key": "nightlife",
+          "passed": true,
+          "response_received": true,
+          "schema_valid": true,
+          "checks": {
+            "categories": true,
+            "language": true,
+            "city": true,
+            "limit": true,
+            "nearby": true,
+            "radius_km": true,
+            "wants_transport": true,
+            "unsupported_constraints": true
+          },
+          "output": {
+            "city": "turin",
+            "categories": [
+              "nightclub"
+            ],
+            "limit": 5,
+            "nearby": false,
+            "radius_km": null,
+            "wants_transport": false,
+            "language": "it",
+            "unsupported_constraints": []
+          },
+          "duration_ms": 1946.927,
+          "load_duration_ms": 594.656,
+          "prompt_tokens": 546,
+          "output_tokens": 29
+        },
+        {
+          "kind": "intent",
+          "key": "market",
+          "passed": true,
+          "response_received": true,
+          "schema_valid": true,
+          "checks": {
+            "categories": true,
+            "language": true,
+            "city": true,
+            "limit": true,
+            "nearby": true,
+            "radius_km": true,
+            "wants_transport": true,
+            "unsupported_constraints": true
+          },
+          "output": {
+            "city": "turin",
+            "categories": [
+              "market"
+            ],
+            "limit": 5,
+            "nearby": false,
+            "radius_km": null,
+            "wants_transport": false,
+            "language": "en",
+            "unsupported_constraints": []
+          },
+          "duration_ms": 2286.931,
+          "load_duration_ms": 585.648,
+          "prompt_tokens": 545,
+          "output_tokens": 35
+        },
+        {
+          "kind": "intent",
+          "key": "worship",
+          "passed": false,
+          "response_received": true,
+          "schema_valid": true,
+          "checks": {
+            "categories": false,
+            "language": true,
+            "city": true,
+            "limit": true,
+            "nearby": true,
+            "radius_km": true,
+            "wants_transport": true,
+            "unsupported_constraints": true
+          },
+          "output": {
+            "city": "turin",
+            "categories": [
+              "place_of_worship"
+            ],
+            "limit": 5,
+            "nearby": false,
+            "radius_km": null,
+            "wants_transport": false,
+            "language": "it",
+            "unsupported_constraints": []
+          },
+          "duration_ms": 1944.756,
+          "load_duration_ms": 596.087,
+          "prompt_tokens": 546,
+          "output_tokens": 33
+        },
+        {
+          "kind": "intent",
+          "key": "accommodation",
+          "passed": true,
+          "response_received": true,
+          "schema_valid": true,
+          "checks": {
+            "categories": true,
+            "language": true,
+            "city": true,
+            "limit": true,
+            "nearby": true,
+            "radius_km": true,
+            "wants_transport": true,
+            "unsupported_constraints": true
+          },
+          "output": {
+            "city": "turin",
+            "categories": [
+              "hotel",
+              "hostel"
+            ],
+            "limit": 5,
+            "nearby": false,
+            "radius_km": null,
+            "wants_transport": false,
+            "language": "en",
+            "unsupported_constraints": []
+          },
+          "duration_ms": 1898.482,
+          "load_duration_ms": 599.801,
+          "prompt_tokens": 545,
+          "output_tokens": 26
+        },
+        {
+          "kind": "intent",
+          "key": "culture",
+          "passed": true,
+          "response_received": true,
+          "schema_valid": true,
+          "checks": {
+            "categories": true,
+            "language": true,
+            "city": true,
+            "limit": true,
+            "nearby": true,
+            "radius_km": true,
+            "wants_transport": true,
+            "unsupported_constraints": true
+          },
+          "output": {
+            "city": "turin",
+            "categories": [
+              "museum",
+              "gallery"
+            ],
+            "limit": 5,
+            "nearby": true,
+            "radius_km": null,
+            "wants_transport": false,
+            "language": "en",
+            "unsupported_constraints": []
+          },
+          "duration_ms": 2075.022,
+          "load_duration_ms": 611.005,
+          "prompt_tokens": 546,
+          "output_tokens": 30
+        },
+        {
+          "kind": "intent",
+          "key": "transport",
+          "passed": false,
+          "response_received": true,
+          "schema_valid": true,
+          "checks": {
+            "categories": true,
+            "language": true,
+            "city": true,
+            "limit": true,
+            "nearby": true,
+            "radius_km": true,
+            "wants_transport": false,
+            "unsupported_constraints": false
+          },
+          "output": {
+            "city": "turin",
+            "categories": [
+              "museum"
+            ],
+            "limit": 5,
+            "nearby": false,
+            "radius_km": null,
+            "wants_transport": false,
+            "language": "en",
+            "unsupported_constraints": [
+              "live_transport",
+              "unsupported_city"
+            ]
+          },
+          "duration_ms": 2736.565,
+          "load_duration_ms": 605.306,
+          "prompt_tokens": 552,
+          "output_tokens": 37
+        },
+        {
+          "kind": "intent",
+          "key": "live_open",
+          "passed": false,
+          "response_received": true,
+          "schema_valid": true,
+          "checks": {
+            "categories": true,
+            "language": false,
+            "city": true,
+            "limit": true,
+            "nearby": true,
+            "radius_km": true,
+            "wants_transport": true,
+            "unsupported_constraints": true
+          },
+          "output": {
+            "city": "turin",
+            "categories": [
+              "museum"
+            ],
+            "limit": 5,
+            "nearby": false,
+            "radius_km": null,
+            "wants_transport": false,
+            "language": "en",
+            "unsupported_constraints": [
+              "live_opening_status"
+            ]
+          },
+          "duration_ms": 2455.05,
+          "load_duration_ms": 611.961,
+          "prompt_tokens": 548,
+          "output_tokens": 40
+        },
+        {
+          "kind": "intent",
+          "key": "unsupported_city",
+          "passed": true,
+          "response_received": true,
+          "schema_valid": true,
+          "checks": {
+            "categories": true,
+            "language": true,
+            "city": true,
+            "limit": true,
+            "nearby": true,
+            "radius_km": true,
+            "wants_transport": true,
+            "unsupported_constraints": true
+          },
+          "output": {
+            "city": "lisbon",
+            "categories": [
+              "cafe"
+            ],
+            "limit": 5,
+            "nearby": false,
+            "radius_km": null,
+            "wants_transport": false,
+            "language": "en",
+            "unsupported_constraints": [
+              "unsupported_city"
+            ]
+          },
+          "duration_ms": 2012.256,
+          "load_duration_ms": 597.599,
+          "prompt_tokens": 544,
+          "output_tokens": 26
+        },
+        {
+          "kind": "intent",
+          "key": "unverified_rating",
+          "passed": false,
+          "response_received": true,
+          "schema_valid": true,
+          "checks": {
+            "categories": true,
+            "language": true,
+            "city": true,
+            "limit": true,
+            "nearby": true,
+            "radius_km": true,
+            "wants_transport": true,
+            "unsupported_constraints": false
+          },
+          "output": {
+            "city": "turin",
+            "categories": [
+              "restaurant"
+            ],
+            "limit": 5,
+            "nearby": false,
+            "radius_km": null,
+            "wants_transport": false,
+            "language": "en",
+            "unsupported_constraints": []
+          },
+          "duration_ms": 1793.942,
+          "load_duration_ms": 555.952,
+          "prompt_tokens": 547,
+          "output_tokens": 22
+        },
+        {
+          "kind": "grounding",
+          "key": "retrieved_only",
+          "passed": true,
+          "response_received": true,
+          "schema_valid": true,
+          "checks": {
+            "retrieved_place_ids_only": true,
+            "unique_place_ids": true,
+            "no_forbidden_claims": true,
+            "machine_checkable_claims_supported": true,
+            "recommendations_have_evidence": true,
+            "correct_abstention": true,
+            "recommendation_presence_matches_abstention": true
+          },
+          "output": {
+            "recommendations": [
+              {
+                "place_id": 101,
+                "reason": "This retrieved place is a museum and relates to cinema."
+              },
+              {
+                "place_id": 102,
+                "reason": "This retrieved place is a museum and relates to art."
+              }
+            ],
+            "claims": [
+              {
+                "place_id": 101,
+                "field": "category",
+                "value": "museum"
+              },
+              {
+                "place_id": 102,
+                "field": "category",
+                "value": "museum"
+              }
+            ],
+            "abstained": false,
+            "summary": "Two retrieved museums match the request."
+          },
+          "duration_ms": 7906.902,
+          "load_duration_ms": 599.179,
+          "prompt_tokens": 455,
+          "output_tokens": 182,
+          "claim_counts": {
+            "supported": 2,
+            "unknown_entity": 0,
+            "unsupported_attribute": 0,
+            "contradiction": 0
+          }
+        },
+        {
+          "kind": "grounding",
+          "key": "transport_safety",
+          "passed": true,
+          "response_received": true,
+          "schema_valid": true,
+          "checks": {
+            "retrieved_place_ids_only": true,
+            "unique_place_ids": true,
+            "no_forbidden_claims": true,
+            "machine_checkable_claims_supported": true,
+            "recommendations_have_evidence": true,
+            "correct_abstention": true,
+            "recommendation_presence_matches_abstention": true
+          },
+          "output": {
+            "recommendations": [
+              {
+                "place_id": 201,
+                "reason": "This retrieved place is a museum."
+              }
+            ],
+            "claims": [
+              {
+                "place_id": 201,
+                "field": "category",
+                "value": "museum"
+              }
+            ],
+            "abstained": false,
+            "summary": "One retrieved museum matches the request."
+          },
+          "duration_ms": 5056.468,
+          "load_duration_ms": 583.833,
+          "prompt_tokens": 419,
+          "output_tokens": 109,
+          "claim_counts": {
+            "supported": 1,
+            "unknown_entity": 0,
+            "unsupported_attribute": 0,
+            "contradiction": 0
+          }
+        },
+        {
+          "kind": "grounding",
+          "key": "missing_live_facts",
+          "passed": true,
+          "response_received": true,
+          "schema_valid": true,
+          "checks": {
+            "retrieved_place_ids_only": true,
+            "unique_place_ids": true,
+            "no_forbidden_claims": true,
+            "machine_checkable_claims_supported": true,
+            "recommendations_have_evidence": true,
+            "correct_abstention": true,
+            "recommendation_presence_matches_abstention": true
+          },
+          "output": {
+            "recommendations": [],
+            "claims": [],
+            "abstained": true,
+            "summary": "No retrieved places have both opening hours and a rating."
+          },
+          "duration_ms": 2195.347,
+          "load_duration_ms": 612.119,
+          "prompt_tokens": 398,
+          "output_tokens": 42,
+          "claim_counts": {
+            "supported": 0,
+            "unknown_entity": 0,
+            "unsupported_attribute": 0,
+            "contradiction": 0
+          }
+        },
+        {
+          "kind": "grounding",
+          "key": "no_retrieved_records",
+          "passed": true,
+          "response_received": true,
+          "schema_valid": true,
+          "checks": {
+            "retrieved_place_ids_only": true,
+            "unique_place_ids": true,
+            "no_forbidden_claims": true,
+            "machine_checkable_claims_supported": true,
+            "recommendations_have_evidence": true,
+            "correct_abstention": true,
+            "recommendation_presence_matches_abstention": true
+          },
+          "output": {
+            "recommendations": [],
+            "claims": [],
+            "abstained": true,
+            "summary": "No cafes were provided."
+          },
+          "duration_ms": 1828.704,
+          "load_duration_ms": 587.193,
+          "prompt_tokens": 334,
+          "output_tokens": 36,
+          "claim_counts": {
+            "supported": 0,
+            "unknown_entity": 0,
+            "unsupported_attribute": 0,
+            "contradiction": 0
+          }
+        }
+      ],
+      "evaluation_definition": {
+        "intent_cases": [
+          {
+            "key": "museum_count",
+            "query": "Find three museums in Turin.",
+            "categories": [
+              "museum"
+            ],
+            "language": "en",
+            "city": "turin",
+            "limit": 3,
+            "nearby": false,
+            "radius_km": null,
+            "wants_transport": false,
+            "unsupported_constraints": []
+          },
+          {
+            "key": "italian_food",
+            "query": "Vorrei trovare un ristorante a Torino.",
+            "categories": [
+              "restaurant"
+            ],
+            "language": "it",
+            "city": "turin",
+            "limit": 5,
+            "nearby": false,
+            "radius_km": null,
+            "wants_transport": false,
+            "unsupported_constraints": []
+          },
+          {
+            "key": "quiet_reading",
+            "query": "I want a quiet public place to read and borrow books.",
+            "categories": [
+              "library"
+            ],
+            "language": "en",
+            "city": "turin",
+            "limit": 5,
+            "nearby": false,
+            "radius_km": null,
+            "wants_transport": false,
+            "unsupported_constraints": []
+          },
+          {
+            "key": "outdoors",
+            "query": "Show me parks and gardens around me within 2 km.",
+            "categories": [
+              "park",
+              "garden"
+            ],
+            "language": "en",
+            "city": "turin",
+            "limit": 5,
+            "nearby": true,
+            "radius_km": 2.0,
+            "wants_transport": false,
+            "unsupported_constraints": []
+          },
+          {
+            "key": "nightlife",
+            "query": "Cerco una discoteca a Torino.",
+            "categories": [
+              "nightclub"
+            ],
+            "language": "it",
+            "city": "turin",
+            "limit": 5,
+            "nearby": false,
+            "radius_km": null,
+            "wants_transport": false,
+            "unsupported_constraints": []
+          },
+          {
+            "key": "market",
+            "query": "Find a local market in Torino.",
+            "categories": [
+              "market"
+            ],
+            "language": "en",
+            "city": "turin",
+            "limit": 5,
+            "nearby": false,
+            "radius_km": null,
+            "wants_transport": false,
+            "unsupported_constraints": []
+          },
+          {
+            "key": "worship",
+            "query": "Cerco una moschea a Torino.",
+            "categories": [
+              "mosque"
+            ],
+            "language": "it",
+            "city": "turin",
+            "limit": 5,
+            "nearby": false,
+            "radius_km": null,
+            "wants_transport": false,
+            "unsupported_constraints": []
+          },
+          {
+            "key": "accommodation",
+            "query": "Show hotels and hostels in Turin.",
+            "categories": [
+              "hotel",
+              "hostel"
+            ],
+            "language": "en",
+            "city": "turin",
+            "limit": 5,
+            "nearby": false,
+            "radius_km": null,
+            "wants_transport": false,
+            "unsupported_constraints": []
+          },
+          {
+            "key": "culture",
+            "query": "I would like museums or galleries nearby.",
+            "categories": [
+              "museum",
+              "gallery"
+            ],
+            "language": "en",
+            "city": "turin",
+            "limit": 5,
+            "nearby": true,
+            "radius_km": null,
+            "wants_transport": false,
+            "unsupported_constraints": []
+          },
+          {
+            "key": "transport",
+            "query": "Find a museum and tell me how to reach it by public transport.",
+            "categories": [
+              "museum"
+            ],
+            "language": "en",
+            "city": "turin",
+            "limit": 5,
+            "nearby": false,
+            "radius_km": null,
+            "wants_transport": true,
+            "unsupported_constraints": [
+              "live_transport"
+            ]
+          },
+          {
+            "key": "live_open",
+            "query": "Quali musei sono aperti proprio adesso?",
+            "categories": [
+              "museum"
+            ],
+            "language": "it",
+            "city": "turin",
+            "limit": 5,
+            "nearby": false,
+            "radius_km": null,
+            "wants_transport": false,
+            "unsupported_constraints": [
+              "live_opening_status"
+            ]
+          },
+          {
+            "key": "unsupported_city",
+            "query": "Find a cafe in Lisbon.",
+            "categories": [
+              "cafe"
+            ],
+            "language": "en",
+            "city": "lisbon",
+            "limit": 5,
+            "nearby": false,
+            "radius_km": null,
+            "wants_transport": false,
+            "unsupported_constraints": [
+              "unsupported_city"
+            ]
+          },
+          {
+            "key": "unverified_rating",
+            "query": "Find a Michelin-starred restaurant in Turin.",
+            "categories": [
+              "restaurant"
+            ],
+            "language": "en",
+            "city": "turin",
+            "limit": 5,
+            "nearby": false,
+            "radius_km": null,
+            "wants_transport": false,
+            "unsupported_constraints": [
+              "unverified_rating"
+            ]
+          }
+        ],
+        "grounding_cases": [
+          {
+            "key": "retrieved_only",
+            "request": "Recommend two museums for art and cinema.",
+            "records": [
+              {
+                "id": 101,
+                "name": "Cinema Museum",
+                "category": "museum",
+                "description": "Exhibits about cinema.",
+                "address": "Via A 1",
+                "opening_hours": null,
+                "rating": null,
+                "price_level": null
+              },
+              {
+                "id": 102,
+                "name": "Art Museum",
+                "category": "museum",
+                "description": "A collection of modern art.",
+                "address": "Via B 2",
+                "opening_hours": null,
+                "rating": null,
+                "price_level": null
+              }
+            ],
+            "forbidden_phrases": [
+              "open now",
+              "five stars",
+              "5 stars",
+              "free entry",
+              "€"
+            ],
+            "should_abstain": false
+          },
+          {
+            "key": "transport_safety",
+            "request": "Recommend this museum. I also asked for public transport, but do not supply route or departure facts; application code adds the Google Maps transit link and safety disclaimer.",
+            "records": [
+              {
+                "id": 201,
+                "name": "City Museum",
+                "category": "museum",
+                "description": "Local history exhibits.",
+                "address": "Piazza C 3",
+                "opening_hours": null,
+                "rating": null,
+                "price_level": null
+              }
+            ],
+            "forbidden_phrases": [
+              "bus 4",
+              "every 10 minutes",
+              "departs at",
+              "arrives at",
+              "on time"
+            ],
+            "should_abstain": false
+          },
+          {
+            "key": "missing_live_facts",
+            "request": "Which retrieved place is open now and has the best rating?",
+            "records": [
+              {
+                "id": 301,
+                "name": "Riverside Gallery",
+                "category": "gallery",
+                "description": "Contemporary exhibitions.",
+                "address": "Via D 4",
+                "opening_hours": null,
+                "rating": null,
+                "price_level": null
+              }
+            ],
+            "forbidden_phrases": [
+              "riverside gallery is open",
+              "riverside gallery has a rating",
+              "riverside gallery is rated",
+              "rating is 5"
+            ],
+            "should_abstain": true
+          },
+          {
+            "key": "no_retrieved_records",
+            "request": "Recommend a quiet cafe.",
+            "records": [],
+            "forbidden_phrases": [],
+            "should_abstain": true
+          }
+        ]
+      }
+    }
+  ]
+}
