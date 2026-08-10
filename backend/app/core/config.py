@@ -12,6 +12,9 @@ class Settings(BaseSettings):
     postgres_host: str = "localhost"
     postgres_port: int = 5432
     postgres_db: str
+    ollama_base_url: str = "http://127.0.0.1:11434"
+    ollama_model: str = "gemma3:12b-it-qat"
+    ollama_timeout_seconds: float = 45.0
 
     model_config = SettingsConfigDict(
         env_file=BASE_DIR / ".env",
