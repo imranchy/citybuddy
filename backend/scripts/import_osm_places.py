@@ -1,13 +1,15 @@
 import argparse
-import time
 from collections import Counter
+from dataclasses import dataclass
 
-import httpx
 from geoalchemy2.elements import WKTElement
 from sqlalchemy import select
 
 from app.core.cities import CityConfig, get_city
+from app.core.overpass import fetch_overpass_json
 from app.core.place_catalog import (
+    CATEGORY_DEFINITIONS,
+    CATEGORY_GROUP_LABELS,
     DESTINATION_CATEGORIES,
     get_category,
     get_osm_filters,
@@ -16,15 +18,90 @@ from app.db.database import SessionLocal
 from app.models.place import Place
 
 
-OVERPASS_URLS = (
-    "https://overpass-api.de/api/interpreter",
-    "https://overpass.kumi.systems/api/interpreter",
-)
+@dataclass(frozen=True, slots=True)
+class OsmFetchResult:
+    elements: list[dict]
+    successful_groups: tuple[str, ...]
+    failed_groups: tuple[str, ...]
 
-USER_AGENT = (
-    "CityBuddy/0.1 "
-    "(https://github.com/imranchy/citybuddy)"
-)
+
+def get_osm_filter_batches(
+    *,
+    category: str | None,
+) -> tuple[tuple[str, tuple[str, ...]], ...]:
+    """Group selectors into a small number of product-aligned requests."""
+
+    if category:
+        return ((category, get_osm_filters(category=category)),)
+
+    batches: list[tuple[str, tuple[str, ...]]] = []
+    for group_key in CATEGORY_GROUP_LABELS:
+        filters: list[str] = []
+        for definition in CATEGORY_DEFINITIONS:
+            if definition.group != group_key:
+                continue
+            for osm_filter in definition.osm_filters:
+                if osm_filter not in filters:
+                    filters.append(osm_filter)
+        if filters:
+            batches.append((group_key, tuple(filters)))
+    return tuple(batches)
+
+
+def fetch_osm_places_with_report(
+    city: CityConfig,
+    *,
+    category: str | None,
+) -> OsmFetchResult:
+    """Download OSM places while preserving successful source groups."""
+
+    collected_elements: dict[str, dict] = {}
+    successful_groups: list[str] = []
+    failed_groups: list[str] = []
+
+    for group_key, osm_filters in get_osm_filter_batches(category=category):
+        selectors = "\n".join(
+            f"nwr{osm_filter}({city.overpass_bounding_box});"
+            for osm_filter in osm_filters
+        )
+        query = f"""
+        [out:json][timeout:180];
+        (
+          {selectors}
+        );
+        out center tags;
+        """
+        try:
+            payload, endpoint = fetch_overpass_json(
+                query,
+                timeout_seconds=240,
+            )
+        except RuntimeError as error:
+            failed_groups.append(group_key)
+            print(f"Source group {group_key} failed and remains pending: {error}")
+            continue
+
+        elements = payload.get("elements", [])
+        timestamp = payload.get("osm3s", {}).get("timestamp_osm_base")
+        for element in elements:
+            element = dict(element)
+            element["_citybuddy_source_endpoint"] = endpoint
+            element["_citybuddy_source_group"] = group_key
+            if timestamp:
+                element["_citybuddy_source_timestamp"] = timestamp
+            element_key = f"{element['type']}/{element['id']}"
+            collected_elements[element_key] = element
+        successful_groups.append(group_key)
+        print(f"Received {len(elements)} elements for source group {group_key}.")
+
+    if not successful_groups:
+        raise RuntimeError("Every requested Overpass source group failed.")
+
+    return OsmFetchResult(
+        elements=list(collected_elements.values()),
+        successful_groups=tuple(successful_groups),
+        failed_groups=tuple(failed_groups),
+    )
 
 
 def get_coordinates(element: dict) -> tuple[float, float] | None:
@@ -130,60 +207,12 @@ def fetch_osm_places(
     *,
     category: str | None,
 ) -> list[dict]:
-    """Download configured places using small, retried Overpass queries."""
+    """Download configured places for legacy direct-import callers."""
 
-    osm_filters = get_osm_filters(category=category)
-
-    if not osm_filters:
-        raise ValueError(
-            f"Category '{category}' is not part of the discovery catalog."
-        )
-
-    collected_elements: dict[str, dict] = {}
-
-    for osm_filter in osm_filters:
-        query = f"""
-        [out:json][timeout:60];
-        nwr{osm_filter}({city.overpass_bounding_box});
-        out center tags;
-        """
-
-        last_error: Exception | None = None
-
-        for overpass_url in OVERPASS_URLS:
-            try:
-                print(f"Requesting {osm_filter} from {overpass_url}...")
-
-                response = httpx.post(
-                    overpass_url,
-                    data={"data": query},
-                    headers={"User-Agent": USER_AGENT},
-                    timeout=120,
-                )
-                response.raise_for_status()
-                elements = response.json().get("elements", [])
-
-                for element in elements:
-                    element_key = f"{element['type']}/{element['id']}"
-                    collected_elements[element_key] = element
-
-                print(f"Received {len(elements)} elements.")
-                time.sleep(5)
-                break
-
-            except (httpx.HTTPError, ValueError) as error:
-                last_error = error
-                print(f"Request failed: {error}")
-                time.sleep(2)
-
-        else:
-            print(
-                "Warning: all Overpass servers failed for "
-                f"{osm_filter}; that source filter was skipped."
-            )
-            print(f"Last error: {last_error}")
-
-    return list(collected_elements.values())
+    return fetch_osm_places_with_report(
+        city,
+        category=category,
+    ).elements
 
 
 def print_counts(title: str, counts: Counter[str]) -> None:

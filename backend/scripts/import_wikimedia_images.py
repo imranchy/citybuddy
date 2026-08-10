@@ -7,6 +7,7 @@ import httpx
 from sqlalchemy import select
 
 from app.core.cities import CityConfig, get_city
+from app.core.overpass import USER_AGENT, fetch_overpass_json
 from app.core.place_catalog import (
     IMAGE_CATEGORIES,
     get_category,
@@ -17,21 +18,10 @@ from app.models.place import Place
 from app.models.place_image import PlaceImage
 
 
-OVERPASS_URLS = (
-    "https://overpass-api.de/api/interpreter",
-    "https://overpass.kumi.systems/api/interpreter",
-)
-
 WIKIDATA_API_URL = "https://www.wikidata.org/w/api.php"
 WIKIMEDIA_COMMONS_API_URL = (
     "https://commons.wikimedia.org/w/api.php"
 )
-
-USER_AGENT = (
-    "CityBuddy/0.1 "
-    "(https://github.com/imranchy/citybuddy)"
-)
-
 
 def strip_html(value: str | None) -> str:
     """Convert simple Wikimedia HTML metadata into plain text."""
@@ -62,51 +52,21 @@ def fetch_osm_wikidata_ids(city: CityConfig) -> dict[str, str]:
     out tags;
     """
 
-    last_error: Exception | None = None
+    payload, _ = fetch_overpass_json(query, timeout_seconds=180)
+    mappings: dict[str, str] = {}
 
-    for overpass_url in OVERPASS_URLS:
-        try:
-            print(
-                "Requesting OSM Wikidata references from "
-                f"{overpass_url}..."
-            )
+    for element in payload.get("elements", []):
+        tags = element.get("tags", {})
+        category = get_category(tags)
+        wikidata_id = tags.get("wikidata")
 
-            response = httpx.post(
-                overpass_url,
-                data={"data": query},
-                headers={"User-Agent": USER_AGENT},
-                timeout=180,
-            )
-            response.raise_for_status()
+        if category not in IMAGE_CATEGORIES or not wikidata_id:
+            continue
 
-            mappings: dict[str, str] = {}
+        source_id = f"{element['type']}/{element['id']}"
+        mappings[source_id] = wikidata_id
 
-            for element in response.json().get("elements", []):
-                tags = element.get("tags", {})
-                category = get_category(tags)
-                wikidata_id = tags.get("wikidata")
-
-                if (
-                    category not in IMAGE_CATEGORIES
-                    or not wikidata_id
-                ):
-                    continue
-
-                source_id = (
-                    f"{element['type']}/{element['id']}"
-                )
-                mappings[source_id] = wikidata_id
-
-            return mappings
-
-        except (httpx.HTTPError, ValueError) as error:
-            last_error = error
-            print(f"Request failed: {error}")
-            time.sleep(2)
-
-    raise RuntimeError(
-        "All Overpass requests failed."
-    ) from last_error
+    return mappings
 
 
 def fetch_wikidata_image_name(

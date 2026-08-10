@@ -4,12 +4,34 @@ import unittest
 from scripts.import_osm_places import (
     filter_candidates_by_source_ids,
     get_lifecycle_tags,
+    get_osm_filter_batches,
     get_operational_metadata,
     parse_osm_source_id,
     validate_refresh_request,
 )
 
 class OsmSourceSelectionTests(unittest.TestCase):
+    def test_all_category_filters_are_batched_by_product_group(self) -> None:
+        batches = get_osm_filter_batches(category=None)
+        group_names = [group_name for group_name, _ in batches]
+        filters = [
+            osm_filter
+            for _, group_filters in batches
+            for osm_filter in group_filters
+        ]
+
+        self.assertEqual(len(batches), 8)
+        self.assertEqual(len(group_names), len(set(group_names)))
+        self.assertEqual(len(filters), len(set(filters)))
+        self.assertIn('["tourism"="museum"]["name"]', filters)
+        self.assertIn('["tourism"="hotel"]["name"]', filters)
+
+    def test_single_category_uses_one_source_batch(self) -> None:
+        self.assertEqual(
+            get_osm_filter_batches(category="museum"),
+            (("museum", ('["tourism"="museum"]["name"]',)),),
+        )
+
     def test_filter_keeps_only_requested_source_ids(self) -> None:
         candidates = [
             (

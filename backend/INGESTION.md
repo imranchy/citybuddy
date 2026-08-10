@@ -5,6 +5,120 @@ preview changes unless `--apply` is explicitly supplied.
 
 Run commands from `backend` with the virtual environment active.
 
+## Staging control plane
+
+The staging workflow is the supported foundation for scheduled collection.
+Collection and production promotion are deliberately separate operations.
+Neither a scheduled job nor a future LLM agent can promote arbitrary records.
+
+Apply the latest migration before using the staging commands:
+
+```cmd
+alembic upgrade head
+```
+
+Preview an OSM collection without writing anything:
+
+```cmd
+python -m scripts.collect_osm_staging --city turin --category museum --limit 20
+```
+
+Preview every discovery category with a manageable, deterministic cap per
+category:
+
+```cmd
+python -m scripts.collect_osm_staging --city turin --limit-per-category 50
+```
+
+Write the same source results to staging only:
+
+```cmd
+python -m scripts.collect_osm_staging --city turin --category museum --limit 20 --apply
+```
+
+Jobs invoked by a deployment scheduler use the same command and record their
+trigger explicitly:
+
+```cmd
+python -m scripts.collect_osm_staging --city turin --category museum --trigger scheduled --apply
+```
+
+For one manual or scheduled command that collects all place categories and
+licensed images for existing production places, use:
+
+```cmd
+python -m scripts.run_city_collection --city turin --place-limit-per-category 50 --image-limit 100
+```
+
+After reviewing both previews, the scheduler can write both result sets to
+staging with:
+
+```cmd
+python -m scripts.run_city_collection --city turin --place-limit-per-category 50 --image-limit 100 --trigger scheduled --apply
+```
+
+This command never promotes places or images into production.
+
+All-category OSM collection batches the configured selectors into the eight
+CityBuddy discovery groups. This substantially reduces public Overpass request
+volume. If one group exhausts all configured Overpass endpoints, candidates
+from successful groups are still written to staging and the run records both
+`successful_source_groups` and `failed_source_groups`. A failed group is
+inconclusive and remains pending for a later collection; it is never treated as
+evidence that the city has zero places in that group. If every group fails, the
+run is marked failed and no place candidates are staged.
+
+Public Overpass instances can return `429`, `502`, or `504` responses. The
+collector retries across configured instances and temporarily cools down an
+endpoint after a `429`. Avoid immediately repeating preview and apply runs,
+because each command performs a fresh source collection.
+
+The scheduling platform should run one collection at the chosen daily time.
+Scheduling remains outside the application process so restarting FastAPI does
+not create duplicate timers. Each applied run is recorded in `ingestion_runs`.
+
+Inspect all candidates and validation findings from a completed run:
+
+```cmd
+python -m scripts.report_staged_places --run-id 12
+```
+
+Preview an explicitly reviewed promotion batch:
+
+```cmd
+python -m scripts.promote_staged_places --staged-id 101 --staged-id 102
+```
+
+Apply the exact same approved IDs only after reviewing the preview:
+
+```cmd
+python -m scripts.promote_staged_places --staged-id 101 --staged-id 102 --apply
+```
+
+For large all-category runs, preview every deterministically valid, pending
+record as one reviewed batch:
+
+```cmd
+python -m scripts.promote_staged_places --run-id 12 --all-eligible
+```
+
+Apply that run-level selection only after checking its category summary:
+
+```cmd
+python -m scripts.promote_staged_places --run-id 12 --all-eligible --apply
+```
+
+Candidates with lifecycle warnings require the additional explicit
+`--approve-warnings` flag. Invalid candidates cannot be promoted. Existing
+production source IDs are skipped instead of overwritten. Promotion batches
+are recorded for audit purposes. Missing addresses, temporary names, duplicate
+names within a run, and names matching another production record are classified
+as `review_required` and excluded from the default bulk selection.
+
+The older `import_osm_places` command remains available for existing manual
+workflows, but automated collection should use `collect_osm_staging`; scheduled
+jobs must never call a direct production importer.
+
 ## Place ingestion
 
 Preview every configured discovery category for Turin:
@@ -76,6 +190,44 @@ routes, times, disruptions, and availability can change and should be verified.
 
 ## Wikimedia image enrichment
 
+The supported automated workflow writes images to staging first. Preview
+licensed image candidates for every image-eligible category:
+
+```cmd
+python -m scripts.collect_wikimedia_staging --city turin --limit 100
+```
+
+Write the same collection to image staging only:
+
+```cmd
+python -m scripts.collect_wikimedia_staging --city turin --limit 100 --apply
+```
+
+The collector follows explicit OSM Wikidata identifiers to Wikidata P18 and
+then Wikimedia Commons. It validates Wikimedia hosts, source identifiers,
+attribution, licenses, and license URLs. Places that already have a Commons
+image are skipped.
+
+Review an image run summary, then request details when needed:
+
+```cmd
+python -m scripts.report_staged_images --run-id 13
+python -m scripts.report_staged_images --run-id 13 --show-details
+```
+
+Preview and apply all valid pending images from the reviewed run:
+
+```cmd
+python -m scripts.promote_staged_images --run-id 13 --all-eligible
+python -m scripts.promote_staged_images --run-id 13 --all-eligible --apply
+```
+
+Image promotion remains a separate, explicit production operation. Existing
+Commons images are never overwritten, and a promoted image becomes primary
+only when the place has no existing image.
+
+### Legacy direct image importer
+
 Preview images for a configured city:
 
 ```cmd
@@ -106,6 +258,9 @@ python -m scripts.import_wikimedia_images --city turin --wikidata-id Q3902364 --
 When one or more `--wikidata-id` options are supplied, all other Wikidata
 mappings are excluded from both preview and import. Always preview the exact
 same allowlist without `--apply` before writing image records.
+
+The direct importer remains available for compatibility, but scheduled jobs
+must use `collect_wikimedia_staging` instead.
 
 ## Duplicate report
 
