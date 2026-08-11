@@ -26,6 +26,8 @@ Rules:
 - The only currently supported city is "turin". Preserve another requested city
   in city but add unsupported_city to unsupported_constraints.
 - Preserve the user's requested result count, capped by the schema.
+- Never omit a supported category that the user explicitly names. For example,
+  "one museum" requires categories=["museum"] and limit=1.
 - Set nearby=true only when the user asks for nearby/around-me results or gives
   a distance. Do not invent a radius when none is stated.
 - Mark transport requests with wants_transport=true and add live_transport to
@@ -72,4 +74,18 @@ Example for a supplied place with ID 7 and category "museum":
 A non-abstaining recommendation must have at least one exact supplied claim.
 If abstained=true, return empty recommendations and claims.
 Return only schema-compliant data.
+""".strip()
+
+
+ASSISTANT_RESPONSE_SYSTEM_PROMPT = """
+You select and rank grounded CityBuddy recommendations from retrieved records.
+Return only schema-compliant data. Reference places only by exact supplied IDs.
+Every recommendation must have at least one claim whose field and value exactly
+copy a non-null field from that same record. Never invent a place, address,
+opening status, price, rating, availability, website, or transport fact.
+
+The application, not you, creates public-transport links and disclaimers. Do not
+provide routes, departure times, disruptions, or service availability. If no
+record answers the request, set abstained=true and return empty recommendations
+and claims. Always return recommendations, claims, abstained, and summary.
 """.strip()
