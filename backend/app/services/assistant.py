@@ -43,6 +43,29 @@ TRANSPORT_TERMS = (
     "pullman",
 )
 
+CONTEXT_REFERENCE_TERMS = (
+    "which one",
+    "which of",
+    "among them",
+    "of those",
+    "the first",
+    "the second",
+    "this place",
+    "that place",
+    "quale",
+    "tra questi",
+    "fra questi",
+    "il primo",
+    "il secondo",
+    "questo posto",
+)
+
+ITALIAN_TRANSIT_DISCLAIMER = (
+    "Apri Google Maps per indicazioni aggiornate con i mezzi pubblici. Percorsi, "
+    "orari di partenza, interruzioni e disponibilità possono cambiare; verifica "
+    "le informazioni più recenti prima di partire."
+)
+
 COUNT_WORDS = {
     "one": 1,
     "two": 2,
@@ -87,6 +110,11 @@ def _conversation_prompt(request: AssistantChatRequest) -> str:
 def _asks_for_transport(message: str) -> bool:
     normalized = message.casefold()
     return any(term in normalized for term in TRANSPORT_TERMS)
+
+
+def _refers_to_previous_places(message: str) -> bool:
+    normalized = message.casefold()
+    return any(term in normalized for term in CONTEXT_REFERENCE_TERMS)
 
 
 def _explicit_categories(message: str) -> list[str]:
@@ -195,51 +223,45 @@ def _validate_grounded_response(
     return claims_by_place
 
 
-def _fact_reason(claims: list[GroundedClaim], place: RetrievedPlace) -> str:
+def _fact_reason(
+    claims: list[GroundedClaim], place: RetrievedPlace, language: str
+) -> str:
     preferred = next(
         (claim for claim in claims if claim.field == "description"),
         next((claim for claim in claims if claim.field == "category"), claims[0]),
     )
     if preferred.field == "description":
         return str(preferred.value)[:240]
+    if preferred.field == "category":
+        prefix = "Categoria" if language == "it" else "Category"
+        return f"{prefix}: {preferred.value}."[:240]
     label = preferred.field.replace("_", " ").capitalize()
     return f"{label}: {preferred.value}."[:240]
 
 
-def _fallback_reason(place: RetrievedPlace) -> str:
+def _fallback_reason(place: RetrievedPlace, language: str) -> str:
     if place.place.description:
         return place.place.description[:240]
-    return f"Category: {place.place.category.replace('_', ' ')}."
+    prefix = "Categoria" if language == "it" else "Category"
+    return f"{prefix}: {place.place.category.replace('_', ' ')}."
 
 
 def _answer_text(*, count: int, language: str, fallback: bool) -> str:
     if language == "it":
         if count == 1:
-            answer = "Ho trovato 1 luogo verificato nel database di CityBuddy."
+            answer = "Ecco un luogo che potrebbe fare al caso tuo."
         elif count > 1:
-            answer = (
-                f"Ho trovato {count} luoghi verificati "
-                "nel database di CityBuddy."
-            )
+            answer = f"Ecco {count} luoghi che potrebbero fare al caso tuo."
         else:
-            answer = (
-                "Non ho trovato luoghi verificati che "
-                "corrispondano alla richiesta."
-            )
-
-        if fallback:
-            answer += " È stato utilizzato un risultato deterministico di riserva."
+            answer = "Non ho trovato luoghi adatti alla tua richiesta."
         return answer
 
     if count == 1:
-        answer = "I found 1 reviewed place in the CityBuddy database."
+        answer = "Here is one place that could be a good match."
     elif count > 1:
-        answer = f"I found {count} reviewed places in the CityBuddy database."
+        answer = f"Here are {count} places that could be a good match."
     else:
-        answer = "I could not find reviewed places matching that request."
-
-    if fallback:
-        answer += " A deterministic fallback result was used."
+        answer = "I could not find a suitable place for that request."
     return answer
 
 
@@ -301,12 +323,17 @@ class AssistantService:
             )
             provider_available = False
             warnings.append(
-                "The local language model was unavailable or returned invalid intent; "
-                "deterministic recovery was used."
+                "Il modello locale non era disponibile; CityBuddy ha usato filtri verificati."
+                if request.language == "it"
+                else "The local model was unavailable; CityBuddy used verified filters."
             )
             intent = DiscoveryIntent(
-                city="turin", categories=explicit_categories, language="en"
+                city="turin", categories=explicit_categories, language=request.language
             )
+
+        # Language is a user preference, not a fact for the model to infer.
+        if intent.language != request.language:
+            intent = intent.model_copy(update={"language": request.language})
 
         if _asks_for_transport(request.message) and not intent.wants_transport:
             constraints = list(intent.unsupported_constraints)
@@ -337,7 +364,11 @@ class AssistantService:
 
         if intent.city not in CITIES:
             return AssistantChatResponse(
-                answer="CityBuddy currently supports Torino only.",
+                answer=(
+                    "Al momento CityBuddy supporta solo Torino."
+                    if request.language == "it"
+                    else "CityBuddy currently supports Torino only."
+                ),
                 intent=intent,
                 recommendations=[],
                 grounded=True,
@@ -347,7 +378,11 @@ class AssistantService:
 
         if intent.nearby and request.latitude is None:
             return AssistantChatResponse(
-                answer="Share your location to search for nearby places.",
+                answer=(
+                    "Condividi la tua posizione per cercare luoghi nelle vicinanze."
+                    if request.language == "it"
+                    else "Share your location to search for nearby places."
+                ),
                 intent=intent,
                 recommendations=[],
                 grounded=True,
@@ -361,6 +396,10 @@ class AssistantService:
 
             retriever = retrieve_places
 
+        contextual_follow_up = bool(
+            request.context_place_ids
+            and _refers_to_previous_places(request.message)
+        )
         places = retriever(
             database,
             city=intent.city,
@@ -369,6 +408,7 @@ class AssistantService:
             latitude=request.latitude if intent.nearby else None,
             longitude=request.longitude if intent.nearby else None,
             radius_km=request.radius_km or intent.radius_km,
+            place_ids=request.context_place_ids if contextual_follow_up else None,
         )
 
         if "live_opening_status" in intent.unsupported_constraints:
@@ -405,17 +445,24 @@ class AssistantService:
                 )
                 provider_available = False
                 warnings.append(
-                    "The generated recommendation could not be validated; "
-                    "deterministic results were returned."
+                    "Non sono riuscito a verificare una preferenza tra questi luoghi."
+                    if request.language == "it" and contextual_follow_up
+                    else "I could not verify a preference between those places."
+                    if contextual_follow_up
+                    else "CityBuddy used verified filters for these suggestions."
                 )
+                if contextual_follow_up:
+                    selected = []
 
         recommendations = [
             AssistantRecommendation(
                 place=place.place,
                 reason=(
-                    _fact_reason(claims_by_place[place.place.id], place)
+                    _fact_reason(
+                        claims_by_place[place.place.id], place, request.language
+                    )
                     if place.place.id in claims_by_place
-                    else _fallback_reason(place)
+                    else _fallback_reason(place, request.language)
                 ),
                 distance_km=place.distance_km,
                 transit_url=(
@@ -440,7 +487,13 @@ class AssistantService:
             grounded=True,
             provider_status="available" if provider_available else "fallback",
             transport_disclaimer=(
-                GOOGLE_MAPS_TRANSIT_DISCLAIMER if intent.wants_transport else None
+                (
+                    ITALIAN_TRANSIT_DISCLAIMER
+                    if request.language == "it"
+                    else GOOGLE_MAPS_TRANSIT_DISCLAIMER
+                )
+                if intent.wants_transport
+                else None
             ),
             warnings=warnings,
         )

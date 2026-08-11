@@ -68,6 +68,7 @@ def retrieve_places(
     latitude: float | None = None,
     longitude: float | None = None,
     radius_km: float | None = None,
+    place_ids: list[int] | None = None,
 ) -> list[RetrievedPlace]:
     """Retrieve reviewed places through controlled SQLAlchemy filters."""
 
@@ -80,6 +81,8 @@ def retrieve_places(
 
     if categories:
         statement = statement.where(Place.category.in_(categories))
+    if place_ids:
+        statement = statement.where(Place.id.in_(place_ids))
 
     if latitude is not None and longitude is not None:
         user_location = cast(

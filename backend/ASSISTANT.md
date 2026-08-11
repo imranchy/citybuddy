@@ -27,12 +27,20 @@ than returning unrestricted model prose.
 ```json
 {
   "message": "Recommend two museums in Turin",
+  "language": "en",
   "history": [],
+  "context_place_ids": [],
   "latitude": null,
   "longitude": null,
   "radius_km": null
 }
 ```
+
+`language` is an explicit user preference (`en` or `it`) and overrides model
+language inference. For referential follow-ups such as "Which one is best for
+cinema?", the client may send the previous recommendation IDs in
+`context_place_ids`; controlled retrieval then limits the comparison to those
+records. A new topic is not restricted by stale context IDs.
 
 For a nearby request, provide both coordinates. The API accepts at most ten
 recent user/assistant messages; the client owns conversation history in this

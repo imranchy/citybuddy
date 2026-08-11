@@ -156,7 +156,7 @@ class AssistantServiceTests(unittest.TestCase):
         self.assertEqual(provider.outputs, [])
         self.assertEqual(
             response.answer,
-            "I found 1 reviewed place in the CityBuddy database.",
+            "Here is one place that could be a good match.",
         )
 
     def test_returns_only_validated_retrieved_recommendations(self) -> None:
@@ -186,7 +186,7 @@ class AssistantServiceTests(unittest.TestCase):
 
         self.assertEqual(response.provider_status, "fallback")
         self.assertEqual(response.recommendations[0].place.id, 10)
-        self.assertIn("could not be validated", response.warnings[0])
+        self.assertIn("verified filters", response.warnings[0])
 
     def test_long_grounded_description_is_bounded_for_api_schema(self) -> None:
         retrieved = place()
@@ -338,6 +338,58 @@ class AssistantServiceTests(unittest.TestCase):
         self.assertEqual(response.recommendations, [])
         self.assertEqual(retriever.calls, [])
         self.assertIn("Share your location", response.answer)
+
+    def test_explicit_language_overrides_model_language(self) -> None:
+        service = AssistantService(
+            provider=SequenceProvider([intent(language="en", limit=1)]),
+            model="fake",
+            retriever=RecordingRetriever([place()]),
+        )
+
+        response = service.respond(
+            object(),
+            AssistantChatRequest(message="Consigliami un museo", language="it"),
+        )
+
+        self.assertEqual(response.intent.language, "it")
+        self.assertEqual(response.answer, "Ecco un luogo che potrebbe fare al caso tuo.")
+        self.assertEqual(response.recommendations[0].reason, "A reviewed cinema collection.")
+
+    def test_referential_follow_up_is_constrained_to_previous_places(self) -> None:
+        retriever = RecordingRetriever([place()])
+        service = AssistantService(
+            provider=SequenceProvider([intent(categories=[])]),
+            model="fake",
+            retriever=retriever,
+        )
+
+        service.respond(
+            object(),
+            AssistantChatRequest(
+                message="Which one is best for cinema?",
+                context_place_ids=[10, 11],
+            ),
+        )
+
+        self.assertEqual(retriever.calls[0]["place_ids"], [10, 11])
+
+    def test_new_topic_is_not_constrained_to_previous_places(self) -> None:
+        retriever = RecordingRetriever([place()])
+        service = AssistantService(
+            provider=SequenceProvider([intent(categories=["park"])]),
+            model="fake",
+            retriever=retriever,
+        )
+
+        service.respond(
+            object(),
+            AssistantChatRequest(
+                message="Show me a park",
+                context_place_ids=[10, 11],
+            ),
+        )
+
+        self.assertIsNone(retriever.calls[0]["place_ids"])
 
 
 if __name__ == "__main__":
