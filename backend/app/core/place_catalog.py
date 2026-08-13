@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+import re
 from typing import Iterable
 
 
@@ -141,3 +142,144 @@ def group_categories(categories: Iterable[str]) -> list[dict[str, object]]:
         if options:
             groups.append({"key": group_key, "label": group_label, "categories": options})
     return groups
+
+# Exact multilingual category aliases used only for deterministic canonicalization.
+# Keep semantic interpretation in the LLM; add new language dictionaries here when
+# CityBuddy expands language support so orchestration code remains unchanged.
+CATEGORY_ALIASES_BY_LANGUAGE: dict[str, dict[str, str]] = {
+    "it": {
+        "ristorante": "restaurant",
+        "ristoranti": "restaurant",
+        "caffetteria": "cafe",
+        "caffetterie": "cafe",
+        "caffè": "cafe",
+        "fast food": "fast_food",
+        "cibo veloce": "fast_food",
+        "museo": "museum",
+        "musei": "museum",
+        "galleria": "gallery",
+        "gallerie": "gallery",
+        "attrazione": "attraction",
+        "attrazioni": "attraction",
+        "teatro": "theatre",
+        "teatri": "theatre",
+        "monumento": "monument",
+        "monumenti": "monument",
+        "sito storico": "historic_site",
+        "siti storici": "historic_site",
+        "belvedere": "viewpoint",
+        "parco": "park",
+        "parchi": "park",
+        "giardino": "garden",
+        "giardini": "garden",
+        "area giochi": "playground",
+        "palestra": "fitness_centre",
+        "centro sportivo": "sports_centre",
+        "discoteca": "nightclub",
+        "discoteche": "nightclub",
+        "locale per concerti": "music_venue",
+        "locale musicale": "music_venue",
+        "mercato": "market",
+        "mercati": "market",
+        "supermercato": "supermarket",
+        "supermercati": "supermarket",
+        "centro commerciale": "shopping_centre",
+        "centri commerciali": "shopping_centre",
+        "biblioteca": "library",
+        "biblioteche": "library",
+        "casa del quartiere": "community_centre",
+        "centro comunitario": "community_centre",
+        "ufficio informazioni turistiche": "tourist_information",
+        "chiesa": "church",
+        "chiese": "church",
+        "moschea": "mosque",
+        "moschee": "mosque",
+        "sinagoga": "synagogue",
+        "sinagoghe": "synagogue",
+        "tempio induista": "hindu_temple",
+        "tempio buddhista": "buddhist_temple",
+        "gurdwara": "gurdwara",
+        "luogo di culto": "place_of_worship",
+        "albergo": "hotel",
+        "alberghi": "hotel",
+        "ostello": "hostel",
+        "ostelli": "hostel",
+    }
+}
+
+
+def _normalized_category_term(value: str) -> str:
+    return " ".join(value.strip().casefold().replace("_", " ").split())
+
+
+def canonicalize_category(value: str) -> str | None:
+    """Resolve a canonical key, English label, or configured language alias."""
+
+    normalized = _normalized_category_term(value)
+    canonical_key = normalized.replace(" ", "_")
+    if canonical_key in DESTINATION_CATEGORIES:
+        return canonical_key
+
+    for definition in CATEGORY_DEFINITIONS:
+        if normalized == _normalized_category_term(definition.label):
+            return definition.key
+
+    for aliases in CATEGORY_ALIASES_BY_LANGUAGE.values():
+        category = aliases.get(normalized)
+        if category in DESTINATION_CATEGORIES:
+            return category
+    return None
+
+
+def find_explicit_categories(message: str) -> list[str]:
+    """Find exact catalog/category-alias mentions in user text, in stable order."""
+
+    normalized_message = _normalized_category_term(message)
+    phrases: dict[str, str] = {}
+
+    for definition in CATEGORY_DEFINITIONS:
+        key_phrase = _normalized_category_term(definition.key)
+        label_phrase = _normalized_category_term(definition.label)
+        phrases[key_phrase] = definition.key
+        phrases[label_phrase] = definition.key
+        phrases[f"{key_phrase}s"] = definition.key
+        phrases[f"{label_phrase}s"] = definition.key
+        if key_phrase.endswith("y"):
+            phrases[f"{key_phrase[:-1]}ies"] = definition.key
+        if label_phrase.endswith("y"):
+            phrases[f"{label_phrase[:-1]}ies"] = definition.key
+
+    for aliases in CATEGORY_ALIASES_BY_LANGUAGE.values():
+        for alias, category in aliases.items():
+            phrases[_normalized_category_term(alias)] = category
+
+    found: list[str] = []
+    for phrase, category in phrases.items():
+        if re.search(rf"\b{re.escape(phrase)}\b", normalized_message) and category not in found:
+            found.append(category)
+    return found
+
+
+def category_terms(category: str) -> tuple[str, ...]:
+    """Return exact configured terms that may name one canonical category."""
+
+    if category not in DESTINATION_CATEGORIES:
+        return ()
+
+    terms: list[str] = []
+    definition = next(item for item in CATEGORY_DEFINITIONS if item.key == category)
+    for value in (definition.key, definition.label):
+        normalized = _normalized_category_term(value)
+        if normalized not in terms:
+            terms.append(normalized)
+        plural = f"{normalized[:-1]}ies" if normalized.endswith("y") else f"{normalized}s"
+        if plural not in terms:
+            terms.append(plural)
+
+    for aliases in CATEGORY_ALIASES_BY_LANGUAGE.values():
+        for alias, mapped_category in aliases.items():
+            if mapped_category == category:
+                normalized = _normalized_category_term(alias)
+                if normalized not in terms:
+                    terms.append(normalized)
+    return tuple(terms)

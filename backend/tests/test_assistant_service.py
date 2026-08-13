@@ -2,7 +2,7 @@ import unittest
 
 from app.core.maps import GOOGLE_MAPS_TRANSIT_DISCLAIMER
 from app.llm.base import LLMCallResult
-from app.llm.schemas import DiscoveryIntent, GroundedResponse
+from app.llm.schemas import DiscoveryIntent, GroundedResponse, RawDiscoveryIntent
 from app.schemas.assistant import AssistantChatRequest
 from app.schemas.place import PlaceRead
 from app.services.assistant import AssistantService
@@ -48,8 +48,10 @@ def result(output, model="fake") -> LLMCallResult:
 class SequenceProvider:
     def __init__(self, outputs) -> None:
         self.outputs = list(outputs)
+        self.models = []
 
     def generate_structured(self, **kwargs) -> LLMCallResult:
+        self.models.append(kwargs["model"])
         output = self.outputs.pop(0)
         if isinstance(output, Exception):
             raise output
@@ -107,6 +109,155 @@ def grounded(
 
 
 class AssistantServiceTests(unittest.TestCase):
+
+    def test_raw_intent_repairs_translated_category_and_text_radius(self) -> None:
+        raw_intent = RawDiscoveryIntent(
+            categories=["parco"],
+            nearby=False,
+            radius_km=0,
+            language="it",
+        )
+        retriever = RecordingRetriever([])
+        service = AssistantService(
+            provider=SequenceProvider([raw_intent]),
+            model="fake",
+            retriever=retriever,
+        )
+
+        response = service.respond(
+            object(),
+            AssistantChatRequest(
+                message="Trova un parco vicino a me entro 2 km",
+                language="it",
+                latitude=45.0703,
+                longitude=7.6869,
+            ),
+        )
+
+        self.assertEqual(response.intent.categories, ["park"])
+        self.assertTrue(response.intent.nearby)
+        self.assertEqual(response.intent.radius_km, 2.0)
+        self.assertEqual(retriever.calls[0]["categories"], ["park"])
+        self.assertEqual(retriever.calls[0]["radius_km"], 2.0)
+
+    def test_italian_explicit_count_is_application_owned(self) -> None:
+        raw_intent = RawDiscoveryIntent(categories=["museo"], limit=9, language="it")
+        service = AssistantService(
+            provider=SequenceProvider([raw_intent]),
+            model="fake",
+            retriever=RecordingRetriever([]),
+        )
+
+        response = service.respond(
+            object(),
+            AssistantChatRequest(
+                message="Consigliami due musei a Torino",
+                language="it",
+            ),
+        )
+
+        self.assertEqual(response.intent.categories, ["museum"])
+        self.assertEqual(response.intent.limit, 2)
+
+    def test_spurious_model_constraints_are_removed_deterministically(self) -> None:
+        noisy_intent = intent(
+            limit=1,
+            nearby=True,
+            wants_transport=True,
+            unsupported_constraints=[
+                "live_transport",
+                "live_opening_status",
+                "live_availability",
+                "unverified_price",
+                "unverified_rating",
+                "unsupported_city",
+            ],
+        )
+        service = AssistantService(
+            provider=SequenceProvider([noisy_intent, grounded()]),
+            model="fake",
+            retriever=RecordingRetriever([place()]),
+        )
+
+        response = service.respond(
+            object(), AssistantChatRequest(message="Recommend museums in Turin")
+        )
+
+        self.assertEqual(response.intent.unsupported_constraints, [])
+        self.assertFalse(response.intent.wants_transport)
+        self.assertFalse(response.intent.nearby)
+        self.assertEqual(response.intent.limit, 5)
+        self.assertEqual(response.warnings, [])
+
+    def test_explicit_safety_constraints_are_derived_from_the_message(self) -> None:
+        service = AssistantService(
+            provider=SequenceProvider([intent(unsupported_constraints=[]), grounded()]),
+            model="fake",
+            retriever=RecordingRetriever([place()]),
+        )
+
+        response = service.respond(
+            object(),
+            AssistantChatRequest(
+                message=(
+                    "Recommend one museum that is Michelin-starred and open right now, and tell "
+                    "me how to reach it by public transport"
+                )
+            ),
+        )
+
+        self.assertEqual(
+            response.intent.unsupported_constraints,
+            ["live_transport", "live_opening_status", "unverified_rating"],
+        )
+        self.assertTrue(response.intent.wants_transport)
+        self.assertEqual(response.intent.limit, 1)
+
+    def test_routes_intent_and_grounding_to_separate_models(self) -> None:
+        provider = SequenceProvider([intent(limit=1), grounded()])
+        service = AssistantService(
+            provider=provider,
+            intent_model="small-intent-model",
+            response_model="large-response-model",
+            retriever=RecordingRetriever([place()]),
+        )
+
+        response = service.respond(
+            object(), AssistantChatRequest(message="Recommend one museum")
+        )
+
+        self.assertEqual(response.provider_status, "available")
+        self.assertEqual(
+            provider.models, ["small-intent-model", "large-response-model"]
+        )
+
+    def test_response_model_recovers_failed_intent_model(self) -> None:
+        provider = SequenceProvider(
+            [RuntimeError("bad"), RuntimeError("bad"), intent(limit=1), grounded()]
+        )
+        service = AssistantService(
+            provider=provider,
+            intent_model="small-intent-model",
+            response_model="large-response-model",
+            retriever=RecordingRetriever([place()]),
+        )
+
+        response = service.respond(
+            object(), AssistantChatRequest(message="Recommend one museum")
+        )
+
+        self.assertEqual(response.provider_status, "available")
+        self.assertEqual(
+            provider.models,
+            [
+                "small-intent-model",
+                "small-intent-model",
+                "large-response-model",
+                "large-response-model",
+            ],
+        )
+        self.assertIn("response model recovered", response.warnings[0])
+
     def test_semantic_evidence_is_validated_and_returned(self) -> None:
         evidence = RetrievedEvidence(
             id=31,
@@ -335,6 +486,31 @@ class AssistantServiceTests(unittest.TestCase):
         self.assertEqual(response.recommendations, [])
         self.assertEqual(retriever.calls, [])
         self.assertIn("Torino only", response.answer)
+
+    def test_model_failure_preserves_explicit_unsupported_city_safely(self) -> None:
+        retriever = RecordingRetriever([place()])
+        service = AssistantService(
+            provider=SequenceProvider(
+                [
+                    RuntimeError("offline"),
+                    RuntimeError("offline"),
+                    RuntimeError("offline"),
+                ]
+            ),
+            intent_model="small-intent-model",
+            response_model="large-response-model",
+            retriever=retriever,
+        )
+
+        response = service.respond(
+            object(), AssistantChatRequest(message="Recommend a museum in Lisbon")
+        )
+
+        self.assertEqual(response.provider_status, "fallback")
+        self.assertEqual(response.intent.city, "lisbon")
+        self.assertIn("unsupported_city", response.intent.unsupported_constraints)
+        self.assertEqual(response.recommendations, [])
+        self.assertEqual(retriever.calls, [])
 
     def test_spurious_unsupported_flag_does_not_block_turin(self) -> None:
         retriever = RecordingRetriever([place()])

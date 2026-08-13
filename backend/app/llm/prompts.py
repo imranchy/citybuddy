@@ -16,26 +16,51 @@ def build_catalog_prompt() -> str:
 
 
 INTENT_SYSTEM_PROMPT = f"""
-You interpret city-discovery requests for CityBuddy. Return only data matching
-the supplied JSON schema. Never invent categories. Select canonical leaf
-categories from this catalog:
+You extract structured discovery intent for CityBuddy.
+
+Return only data matching the supplied JSON schema.
+
+CityBuddy discovery categories:
 {build_catalog_prompt()}
 
-Rules:
-- Turin and Torino normalize to city "turin".
-- The only currently supported city is "turin". Preserve another requested city
-  in city but add unsupported_city to unsupported_constraints.
-- Preserve the user's requested result count, capped by the schema.
-- Never omit a supported category that the user explicitly names. For example,
-  "one museum" requires categories=["museum"] and limit=1.
-- Set nearby=true only when the user asks for nearby/around-me results or gives
-  a distance. Do not invent a radius when none is stated.
-- Mark transport requests with wants_transport=true and add live_transport to
-  unsupported_constraints. Never create routes, departures, disruptions, or
-  availability.
-- Put requests for live opening status, live availability, current transport,
-  unknown prices, or unknown ratings in unsupported_constraints.
-- Detect whether the request is primarily English or Italian.
+Interpret both English and Italian.
+
+Category rules:
+- Return only canonical CityBuddy leaf-category names from the catalog.
+- Use the smallest exact category set supported by the user's request.
+- Do not broaden an exact category.
+- "bar" means ["bar"], not ["bar", "pub"].
+- "pub" means ["pub"], not ["bar"].
+- "museum" means ["museum"].
+- "monument" means ["monument"], not ["monument", "historic_site"].
+- Infer ordinary semantic requests when the category word is indirect.
+  Examples:
+  - somewhere to read or borrow books -> ["library"]
+  - somewhere to stay -> ["hotel", "hostel"]
+  - green outdoor spaces -> ["park", "garden"]
+- Understand equivalent Italian wording and map it to the same canonical categories.
+
+City rules:
+- Turin and Torino normalize to "turin".
+- If another city is explicitly named, preserve its lowercase name.
+- Do not mark Turin/Torino as unsupported.
+- Do not invent unsupported-city constraints.
+
+Language rules:
+- If required_response_language is supplied, copy that value exactly.
+- Otherwise detect "en" or "it" from the user request.
+
+Control-field rules:
+- Extract explicit counts when clearly requested.
+- Detect nearby/radius requests when clearly expressed.
+- Detect explicit public-transport intent.
+- Add unsupported constraints only when the user explicitly requests that
+  unsupported capability.
+- Never add precautionary unsupported constraints.
+- Never duplicate unsupported constraints.
+
+The application will deterministically validate and normalize these fields before
+retrieval, so prefer a conservative interpretation rather than inventing details.
 """.strip()
 
 
@@ -89,11 +114,12 @@ validated intent language. Make the summary conversational and directly answer
 the current message, including comparisons and follow-ups. A category match by
 itself does not prove a preference such as cinema, sustainability, quiet study,
 or local cuisine. If the supplied evidence does not support that preference,
-abstain instead of selecting the least-wrong candidate. Never invent a place, address,
-opening status, price, rating, availability, website, or transport fact.
+abstain instead of selecting the least-wrong candidate. Never invent a place,
+address, opening status, price, rating, availability, website, or transport fact.
 
 The application, not you, creates public-transport links and disclaimers. Do not
 provide routes, departure times, disruptions, or service availability. If no
-record answers the request, set abstained=true and return empty recommendations
-and claims. Always return recommendations, claims, abstained, and summary.
+record answers the request, set abstained=true and return saying
+"I cannot answer this question, try a different query.".
+Always return recommendations, claims, abstained, and summary.
 """.strip()

@@ -2,7 +2,7 @@ import unittest
 
 from pydantic import ValidationError
 
-from app.llm.schemas import DiscoveryIntent, GroundedResponse
+from app.llm.schemas import DiscoveryIntent, GroundedResponse, RawDiscoveryIntent
 
 
 class DiscoveryIntentSchemaTests(unittest.TestCase):
@@ -27,6 +27,25 @@ class DiscoveryIntentSchemaTests(unittest.TestCase):
     def test_extra_model_fields_are_rejected(self) -> None:
         with self.assertRaises(ValidationError):
             DiscoveryIntent.model_validate(
+                {"categories": ["museum"], "raw_sql": "SELECT * FROM places"}
+            )
+
+
+class RawDiscoveryIntentSchemaTests(unittest.TestCase):
+    def test_raw_intent_allows_repairable_model_output(self) -> None:
+        intent = RawDiscoveryIntent(
+            categories=["parco"],
+            nearby=False,
+            radius_km=2,
+            language="italiano",
+            unsupported_constraints=["made_up_flag"],
+        )
+        self.assertEqual(intent.categories, ["parco"])
+        self.assertEqual(intent.radius_km, 2)
+
+    def test_raw_intent_still_rejects_extra_fields(self) -> None:
+        with self.assertRaises(ValidationError):
+            RawDiscoveryIntent.model_validate(
                 {"categories": ["museum"], "raw_sql": "SELECT * FROM places"}
             )
 

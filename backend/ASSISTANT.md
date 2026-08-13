@@ -8,19 +8,27 @@ database credentials, or unrestricted tool access.
 
 ```text
 POST /api/assistant/chat
-  -> structured intent extraction
+  -> structured intent extraction (small routed model)
   -> deterministic capability and location checks
   -> controlled SQLAlchemy/PostGIS retrieval
-  -> grounded place selection
+  -> grounded place selection (response model)
   -> exact place-ID and claim validation
   -> deterministic response rendering
 ```
 
-The model interprets the request and selects retrieved candidates. Application
+The intent model interprets the request and the response model selects and
+explains retrieved candidates. Application
 code owns category validation, city support, geographic filters, limits,
 database access, factual validation, transport URLs, and safety disclaimers.
 The final answer and reasons are rendered from validated database facts rather
 than returning unrestricted model prose.
+
+Before retrieval, application code re-validates language selection, supported
+city, explicit result counts, proximity/radius behavior, transport intent, and
+unsupported/live-fact flags. Model-produced precautionary flags that the user
+did not request are discarded, so they cannot create irrelevant warnings or
+change retrieval scope.
+
 
 ## Grounded semantic evidence (Milestone A)
 
@@ -104,8 +112,24 @@ Start PostgreSQL/PostGIS and Ollama, then run the API from `backend`:
 uvicorn app.main:app --reload
 ```
 
-The configured model defaults to `gemma3:12b-it-qat`. Interactive API docs are
+The configured intent model defaults to `qwen3:4b`; the grounded response model
+defaults to `gemma3:12b-it-qat`. Both are served by the same provider-neutral
+interface and local Ollama API. Ollama hosts the models, while CityBuddy routes
+each application task to the configured role. Interactive API docs are
 available at `http://127.0.0.1:8000/docs`.
+
+Before browser testing, run the intent-only benchmark and direct CLI assistant:
+
+```cmd
+python -m scripts.evaluate_intent_models --model qwen3:4b --model qwen3:8b --model gemma3:12b-it-qat
+python -m scripts.run_assistant_cli "Recommend two museums in Turin" --language en
+python -m scripts.run_assistant_cli "Consigliami due musei a Torino" --language it
+```
+
+Model splitting can reduce generation cost, but two models may compete for GPU
+memory. Compare warm latency and observe `ollama ps`; if model swapping erases
+the speed benefit, CityBuddy can configure the response model for both roles
+without changing the service flow.
 
 Automated tests use fake providers and retrievers and do not require live model
 calls:

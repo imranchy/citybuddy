@@ -13,7 +13,8 @@ class Settings(BaseSettings):
     postgres_port: int = 5432
     postgres_db: str
     ollama_base_url: str = "http://127.0.0.1:11434"
-    ollama_model: str = "gemma3:12b-it-qat"
+    ollama_intent_model: str = "qwen3:4b"
+    ollama_response_model: str = "gemma3:12b-it-qat"
     ollama_timeout_seconds: float = 45.0
     ollama_embedding_model: str = "bge-m3"
     rag_enabled: bool = True

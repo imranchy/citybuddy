@@ -12,11 +12,20 @@ from app.core.maps import (
     GOOGLE_MAPS_TRANSIT_DISCLAIMER,
     get_google_maps_transit_url,
 )
-from app.core.place_catalog import CATEGORY_DEFINITIONS
+from app.core.place_catalog import (
+    canonicalize_category,
+    category_terms,
+    find_explicit_categories,
+)
 from app.llm.base import StructuredLLMProvider
 from app.llm.embeddings import EmbeddingProvider
 from app.llm.prompts import ASSISTANT_RESPONSE_SYSTEM_PROMPT, INTENT_SYSTEM_PROMPT
-from app.llm.schemas import DiscoveryIntent, GroundedClaim, GroundedResponse
+from app.llm.schemas import (
+    DiscoveryIntent,
+    GroundedClaim,
+    GroundedResponse,
+    RawDiscoveryIntent,
+)
 from app.schemas.assistant import (
     AssistantChatRequest,
     AssistantChatResponse,
@@ -95,6 +104,74 @@ COUNT_WORDS = {
     "dieci": 10,
 }
 
+FALLBACK_CITY_NAMES = {
+    "turin": "turin",
+    "torino": "turin",
+    "lisbon": "lisbon",
+    "lisbona": "lisbon",
+}
+
+
+NEARBY_TERMS = (
+    "nearby",
+    "near me",
+    "around me",
+    "close to me",
+    "vicino a me",
+    "vicini a me",
+    "nelle vicinanze",
+    "qui vicino",
+)
+
+LIVE_OPENING_PATTERNS = (
+    r"\bopen (?:right )?now\b",
+    r"\bcurrently open\b",
+    r"\bapert[oi] (?:proprio )?(?:ora|adesso)\b",
+    r"\bapert[ei] (?:proprio )?(?:ora|adesso)\b",
+)
+
+LIVE_AVAILABILITY_TERMS = (
+    "available now",
+    "current availability",
+    "availability right now",
+    "disponibile adesso",
+    "disponibili adesso",
+    "disponibilità attuale",
+)
+
+PRICE_TERMS = (
+    "price",
+    "prices",
+    "cost",
+    "costs",
+    "how much",
+    "cheap",
+    "cheapest",
+    "expensive",
+    "free entry",
+    "prezzo",
+    "prezzi",
+    "costo",
+    "costa",
+    "economico",
+    "economica",
+    "gratuito",
+    "gratuita",
+)
+
+RATING_TERMS = (
+    "rating",
+    "rated",
+    "best rated",
+    "best-rated",
+    "michelin",
+    "starred",
+    "stars",
+    "valutazione",
+    "valutazioni",
+    "stelle",
+)
+
 
 class GroundingValidationError(RuntimeError):
     """Raised when a generated answer is not supported by retrieved records."""
@@ -121,56 +198,154 @@ def _asks_for_transport(message: str) -> bool:
     return any(term in normalized for term in TRANSPORT_TERMS)
 
 
+def _asks_for_nearby(message: str) -> bool:
+    normalized = message.casefold()
+    return any(term in normalized for term in NEARBY_TERMS)
+
+
+def _has_live_opening_request(message: str) -> bool:
+    normalized = message.casefold()
+    return any(re.search(pattern, normalized) for pattern in LIVE_OPENING_PATTERNS)
+
+
+def _deterministic_constraints(message: str, city: str) -> list[str]:
+    """Derive safety/capability flags from the user message, not model guesses."""
+
+    normalized = message.casefold()
+    constraints: list[str] = []
+
+    if _asks_for_transport(message):
+        constraints.append("live_transport")
+    if _has_live_opening_request(message):
+        constraints.append("live_opening_status")
+    if any(term in normalized for term in LIVE_AVAILABILITY_TERMS):
+        constraints.append("live_availability")
+    if any(term in normalized for term in PRICE_TERMS):
+        constraints.append("unverified_price")
+    if any(term in normalized for term in RATING_TERMS):
+        constraints.append("unverified_rating")
+    if city not in CITIES:
+        constraints.append("unsupported_city")
+
+    return constraints
+
+
+def _validated_city(message: str, model_city: str) -> str:
+    """Keep an unsupported model city only when the user actually named it."""
+
+    explicit_known = _fallback_city(message)
+    normalized = message.casefold()
+    if explicit_known != "turin" or re.search(r"\b(?:turin|torino)\b", normalized):
+        return explicit_known
+    if model_city in CITIES:
+        return model_city
+    if model_city and re.search(rf"\b{re.escape(model_city.casefold())}\b", normalized):
+        return model_city
+    return "turin"
+
+
 def _refers_to_previous_places(message: str) -> bool:
     normalized = message.casefold()
     return any(term in normalized for term in CONTEXT_REFERENCE_TERMS)
 
 
 def _explicit_categories(message: str) -> list[str]:
-    """Find explicitly named catalog categories for validation and recovery."""
+    """Find explicitly named catalog categories and configured aliases."""
 
-    normalized = message.casefold().replace("_", " ")
-    matches: list[str] = []
-    for definition in CATEGORY_DEFINITIONS:
-        phrases = {
-            definition.key.replace("_", " ").casefold(),
-            definition.label.casefold(),
-        }
-        for phrase in tuple(phrases):
-            phrases.add(f"{phrase}s")
-            if phrase.endswith("y"):
-                phrases.add(f"{phrase[:-1]}ies")
-        if any(re.search(rf"\b{re.escape(phrase)}\b", normalized) for phrase in phrases):
-            matches.append(definition.key)
-    return matches
+    return find_explicit_categories(message)
+
+
+def _requested_radius_km(message: str) -> float | None:
+    """Extract an explicit kilometre radius from the user message."""
+
+    normalized = message.casefold().replace(",", ".")
+    match = re.search(
+        r"\b(?:within|entro|nel raggio di|raggio di)?\s*(\d+(?:\.\d+)?)\s*"
+        r"(?:km|kilomet(?:re|er)s?|chilometri?)\b",
+        normalized,
+    )
+    if not match:
+        return None
+
+    radius = float(match.group(1))
+    return radius if 0.1 <= radius <= 20.0 else None
 
 
 def _requested_limit(message: str, categories: list[str]) -> int | None:
-    """Extract an explicit count only when it modifies a selected category."""
+    """Extract an explicit count next to any configured term for a category."""
 
-    normalized = message.casefold().replace("_", " ")
+    normalized = " ".join(message.casefold().replace("_", " ").split())
     for category in categories:
-        category_pattern = re.escape(category.replace("_", " ")) + "s?"
-        numeric_match = re.search(
-            rf"\b(10|[1-9])\s+(?:\w+\s+)?{category_pattern}\b",
-            normalized,
-        )
-        if numeric_match:
-            return int(numeric_match.group(1))
+        terms = category_terms(category) or (category.replace("_", " "),)
+        for term in sorted(terms, key=len, reverse=True):
+            category_pattern = re.escape(term)
+            numeric_match = re.search(
+                rf"\b(10|[1-9])\s+(?:\w+\s+)?{category_pattern}\b",
+                normalized,
+            )
+            if numeric_match:
+                return int(numeric_match.group(1))
 
-        for word, count in COUNT_WORDS.items():
+            for word, count in COUNT_WORDS.items():
+                if re.search(
+                    rf"\b{re.escape(word)}\s+(?:\w+\s+)?{category_pattern}\b",
+                    normalized,
+                ):
+                    return count
+
             if re.search(
-                rf"\b{re.escape(word)}\s+(?:\w+\s+)?{category_pattern}\b",
+                rf"\b(?:a|an|un|una)\s+{category_pattern}\b",
                 normalized,
             ):
-                return count
-
-        if re.search(
-            rf"\b(?:a|an|un|una)\s+{category_pattern}\b",
-            normalized,
-        ):
-            return 1
+                return 1
     return None
+
+
+def _fallback_city(message: str) -> str:
+    """Recover explicit known city names without asking the model to infer them."""
+
+    normalized = message.casefold()
+    for city_name, city_key in FALLBACK_CITY_NAMES.items():
+        if re.search(rf"\b{re.escape(city_name)}\b", normalized):
+            return city_key
+    return "turin"
+
+def _canonical_model_categories(values: list[str]) -> list[str]:
+    categories: list[str] = []
+    for value in values:
+        category = canonicalize_category(value)
+        if category is not None and category not in categories:
+            categories.append(category)
+    return categories
+
+
+def normalize_discovery_intent(
+    request: AssistantChatRequest,
+    intent: RawDiscoveryIntent | DiscoveryIntent,
+) -> DiscoveryIntent:
+    """Normalize advisory model output into strict application-owned intent."""
+
+    explicit_categories = _explicit_categories(request.message)
+    model_categories = _canonical_model_categories(intent.categories)
+    categories = model_categories or explicit_categories
+    validated_city = _validated_city(request.message, intent.city)
+    explicit_radius = request.radius_km or _requested_radius_km(request.message)
+    nearby = _asks_for_nearby(request.message) or explicit_radius is not None
+
+    normalized = {
+        "language": request.language,
+        "city": validated_city,
+        "categories": categories,
+        "limit": _requested_limit(request.message, categories) or 5,
+        "nearby": nearby,
+        "radius_km": explicit_radius if nearby else None,
+        "wants_transport": _asks_for_transport(request.message),
+        "unsupported_constraints": _deterministic_constraints(
+            request.message,
+            validated_city,
+        ),
+    }
+    return DiscoveryIntent.model_validate(normalized)
 
 
 def _record(place: RetrievedPlace) -> dict[str, Any]:
@@ -300,15 +475,25 @@ class AssistantService:
         self,
         *,
         provider: StructuredLLMProvider,
-        model: str,
+        intent_model: str | None = None,
+        response_model: str | None = None,
+        model: str | None = None,
         retriever: PlaceRetriever | None = None,
         embedding_provider: EmbeddingProvider | None = None,
         embedding_model: str = "bge-m3",
         evidence_retriever: EvidenceRetriever | None = None,
         evidence_limit: int = 8,
     ) -> None:
+        # ``model`` remains as a compatibility path for tests and external code
+        # written before model routing was introduced. Production configuration
+        # supplies the two explicit roles.
+        if model is None and (intent_model is None or response_model is None):
+            raise ValueError(
+                "Provide intent_model and response_model, or the legacy model argument."
+            )
         self.provider = provider
-        self.model = model
+        self.intent_model = intent_model or model
+        self.response_model = response_model or model
         self.retriever = retriever
         self.embedding_provider = embedding_provider
         self.embedding_model = embedding_model
@@ -325,7 +510,10 @@ class AssistantService:
         explicit_categories = _explicit_categories(request.message)
         intent: DiscoveryIntent | None = None
         last_error: Exception | None = None
-        for attempt in range(2):
+        intent_attempt_models = [self.intent_model, self.intent_model]
+        if self.response_model != self.intent_model:
+            intent_attempt_models.append(self.response_model)
+        for attempt, intent_model in enumerate(intent_attempt_models):
             retry_instruction = (
                 "\nThe previous response was invalid or omitted an explicitly named "
                 "supported category. Re-read the request and return corrected schema-only "
@@ -335,12 +523,25 @@ class AssistantService:
             )
             try:
                 intent_call = self.provider.generate_structured(
-                    model=self.model,
+                    model=intent_model,
                     system_prompt=INTENT_SYSTEM_PROMPT,
                     user_prompt=_conversation_prompt(request) + retry_instruction,
-                    output_schema=DiscoveryIntent,
+                    output_schema=RawDiscoveryIntent,
                 )
-                candidate = DiscoveryIntent.model_validate(intent_call.output)
+                raw_payload = (
+                    intent_call.output.model_dump()
+                    if hasattr(intent_call.output, "model_dump")
+                    else intent_call.output
+                )
+                raw_candidate = RawDiscoveryIntent.model_validate(raw_payload)
+                raw_categories = _canonical_model_categories(raw_candidate.categories)
+                if explicit_categories and not set(explicit_categories).intersection(
+                    raw_categories
+                ):
+                    raise IntentValidationError(
+                        "The model omitted an explicitly named supported category."
+                    )
+                candidate = normalize_discovery_intent(request, raw_candidate)
                 if explicit_categories and not set(explicit_categories).intersection(
                     candidate.categories
                 ):
@@ -348,7 +549,17 @@ class AssistantService:
                         "The model omitted an explicitly named supported category."
                     )
                 intent = candidate
-                if attempt:
+                if (
+                    intent_model == self.response_model
+                    and self.response_model != self.intent_model
+                ):
+                    warnings.append(
+                        "Il modello di risposta ha recuperato la richiesta dopo un errore "
+                        "del modello di intenti."
+                        if request.language == "it"
+                        else "The intent model failed; the response model recovered the request."
+                    )
+                elif attempt:
                     warnings.append("Intent extraction succeeded after one model retry.")
                 break
             except Exception as error:
@@ -365,40 +576,13 @@ class AssistantService:
                 if request.language == "it"
                 else "The local model was unavailable; CityBuddy used verified filters."
             )
-            intent = DiscoveryIntent(
-                city="turin", categories=explicit_categories, language=request.language
+            fallback_city = _fallback_city(request.message)
+            fallback_raw = RawDiscoveryIntent(
+                city=fallback_city,
+                categories=explicit_categories,
+                language=request.language,
             )
-
-        # Language is a user preference, not a fact for the model to infer.
-        if intent.language != request.language:
-            intent = intent.model_copy(update={"language": request.language})
-
-        if _asks_for_transport(request.message) and not intent.wants_transport:
-            constraints = list(intent.unsupported_constraints)
-            if "live_transport" not in constraints:
-                constraints.append("live_transport")
-            intent = intent.model_copy(
-                update={"wants_transport": True, "unsupported_constraints": constraints}
-            )
-
-        intent_updates: dict[str, Any] = {}
-        if not intent.categories and explicit_categories:
-            intent_updates["categories"] = explicit_categories
-        explicit_limit = _requested_limit(
-            request.message, intent.categories or explicit_categories
-        )
-        if explicit_limit is not None:
-            intent_updates["limit"] = explicit_limit
-        if request.radius_km is not None:
-            intent_updates.update({"nearby": True, "radius_km": request.radius_km})
-        if intent.city in CITIES and "unsupported_city" in intent.unsupported_constraints:
-            intent_updates["unsupported_constraints"] = [
-                item
-                for item in intent.unsupported_constraints
-                if item != "unsupported_city"
-            ]
-        if intent_updates:
-            intent = intent.model_copy(update=intent_updates)
+            intent = normalize_discovery_intent(request, fallback_raw)
 
         if intent.city not in CITIES:
             return AssistantChatResponse(
@@ -533,7 +717,7 @@ class AssistantService:
         if provider_available and places:
             try:
                 response_call = self.provider.generate_structured(
-                    model=self.model,
+                    model=self.response_model,
                     system_prompt=ASSISTANT_RESPONSE_SYSTEM_PROMPT,
                     user_prompt=_grounding_prompt(request, intent, places, evidence),
                     output_schema=GroundedResponse,

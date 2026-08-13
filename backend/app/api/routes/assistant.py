@@ -22,7 +22,8 @@ def get_assistant_service() -> AssistantService:
             base_url=settings.ollama_base_url,
             timeout_seconds=settings.ollama_timeout_seconds,
         ),
-        model=settings.ollama_model,
+        intent_model=settings.ollama_intent_model,
+        response_model=settings.ollama_response_model,
         embedding_provider=(
             OllamaEmbeddingProvider(
                 base_url=settings.ollama_base_url,

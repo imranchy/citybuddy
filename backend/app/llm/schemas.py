@@ -5,8 +5,53 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from app.core.place_catalog import DESTINATION_CATEGORIES
 
 
+class RawDiscoveryIntent(BaseModel):
+    """Permissive structured output returned directly by the intent model.
+
+    Raw values are advisory and must be normalized into ``DiscoveryIntent``
+    before any retrieval or database access occurs.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    city: str = "turin"
+    categories: list[str] = Field(default_factory=list, max_length=8)
+    limit: int = 5
+    nearby: bool = False
+    radius_km: float | None = None
+    wants_transport: bool = False
+    language: str = "en"
+    unsupported_constraints: list[str] = Field(default_factory=list, max_length=16)
+
+    @field_validator("city")
+    @classmethod
+    def normalize_raw_city(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        return "turin" if normalized == "torino" else normalized
+
+    @field_validator("categories")
+    @classmethod
+    def normalize_raw_categories(cls, values: list[str]) -> list[str]:
+        normalized: list[str] = []
+        for value in values:
+            category = value.strip().lower().replace(" ", "_")
+            if category and category not in normalized:
+                normalized.append(category)
+        return normalized
+
+    @field_validator("unsupported_constraints")
+    @classmethod
+    def normalize_raw_constraints(cls, values: list[str]) -> list[str]:
+        normalized: list[str] = []
+        for value in values:
+            constraint = value.strip().lower()
+            if constraint and constraint not in normalized:
+                normalized.append(constraint)
+        return normalized
+
+
 class DiscoveryIntent(BaseModel):
-    """Model-interpreted request constrained to CityBuddy capabilities."""
+    """Strict, application-normalized request safe to use for retrieval."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -33,9 +78,7 @@ class DiscoveryIntent(BaseModel):
     @classmethod
     def normalize_city(cls, value: str) -> str:
         normalized = value.strip().lower()
-        if normalized == "torino":
-            return "turin"
-        return normalized
+        return "turin" if normalized == "torino" else normalized
 
     @field_validator("categories")
     @classmethod
@@ -85,7 +128,7 @@ class GroundedClaim(BaseModel):
 
 
 class GroundedResponse(BaseModel):
-    """Small evaluation response whose place references can be validated."""
+    """Grounded response whose entities and claims can be validated exactly."""
 
     model_config = ConfigDict(extra="forbid")
 

@@ -38,6 +38,33 @@ Markdown. The JSON report contains each structured output, individual check,
 machine-checkable claim result, and latency breakdown; the Markdown report is
 a compact comparison.
 
+## Intent-model routing benchmark
+
+The response benchmark above tests both intent extraction and grounded answer
+generation. To select a smaller routing model without paying for grounding
+calls, run the intent-only benchmark:
+
+```cmd
+ollama pull qwen3:4b
+python -m scripts.evaluate_intent_models --model qwen3:4b --model qwen3:8b --model gemma3:12b-it-qat
+```
+
+This runs 13 capability/safety cases plus 68 English/Italian taxonomy cases
+reused from the versioned RAG suite. The evaluator uses the same structured
+conversation envelope as the assistant, including the selected
+`required_response_language`, so the benchmark measures the production intent
+contract rather than a different raw-prompt path. It reports strict case
+accuracy, individual field accuracy, JSON-schema validity, provider errors, and
+cold/warm latency. Accepting a small model
+requires 100% schema validity, zero errors, and strong results on safety fields
+such as unsupported city, live facts, nearby radius, and transport intent. A
+single aggregate score is not sufficient. Reports are local under `artifacts`.
+
+CityBuddy defaults to `qwen3:4b` as the intent candidate and
+`gemma3:12b-it-qat` as the response model. The intent benchmark is the gate:
+if `qwen3:4b` does not meet the application checks or model swapping is slower,
+set `OLLAMA_INTENT_MODEL=gemma3:12b-it-qat` until another candidate passes.
+
 ## Optional LangSmith traces
 
 LangSmith is optional and disabled by default. Create a LangSmith API key, copy

@@ -25,17 +25,17 @@ class IntentCase:
 
 INTENT_CASES = (
     IntentCase("museum_count", "Find three museums in Turin.", ("museum",), "en", limit=3),
-    IntentCase("italian_food", "Vorrei trovare un ristorante a Torino.", ("restaurant",), "it"),
+    IntentCase("italian_food", "Vorrei trovare un ristorante a Torino.", ("restaurant",), "it", limit=1),
     IntentCase("quiet_reading", "I want a quiet public place to read and borrow books.", ("library",), "en"),
     IntentCase("outdoors", "Show me parks and gardens around me within 2 km.", ("park", "garden"), "en", nearby=True, radius_km=2.0),
-    IntentCase("nightlife", "Cerco una discoteca a Torino.", ("nightclub",), "it"),
+    IntentCase("nightlife", "Cerco una discoteca a Torino.", ("nightclub",), "it", limit=1),
     IntentCase("market", "Find a local market in Torino.", ("market",), "en"),
-    IntentCase("worship", "Cerco una moschea a Torino.", ("mosque",), "it"),
+    IntentCase("worship", "Cerco una moschea a Torino.", ("mosque",), "it", limit=1),
     IntentCase("accommodation", "Show hotels and hostels in Turin.", ("hotel", "hostel"), "en"),
     IntentCase("culture", "I would like museums or galleries nearby.", ("museum", "gallery"), "en", nearby=True),
-    IntentCase("transport", "Find a museum and tell me how to reach it by public transport.", ("museum",), "en", wants_transport=True, unsupported_constraints=("live_transport",)),
+    IntentCase("transport", "Find a museum and tell me how to reach it by public transport.", ("museum",), "en", limit=1, wants_transport=True, unsupported_constraints=("live_transport",)),
     IntentCase("live_open", "Quali musei sono aperti proprio adesso?", ("museum",), "it", unsupported_constraints=("live_opening_status",)),
-    IntentCase("unsupported_city", "Find a cafe in Lisbon.", ("cafe",), "en", city="lisbon", unsupported_constraints=("unsupported_city",)),
+    IntentCase("unsupported_city", "Find a cafe in Lisbon.", ("cafe",), "en", city="lisbon", limit=1, unsupported_constraints=("unsupported_city",)),
     IntentCase("unverified_rating", "Find a Michelin-starred restaurant in Turin.", ("restaurant",), "en", unsupported_constraints=("unverified_rating",)),
 )
 
