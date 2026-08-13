@@ -7,6 +7,7 @@ from app.schemas.assistant import AssistantChatRequest
 from app.schemas.place import PlaceRead
 from app.services.assistant import AssistantService
 from app.services.place_types import RetrievedPlace
+from app.services.rag import RetrievedEvidence
 
 
 def place(place_id: int = 10) -> RetrievedPlace:
@@ -65,6 +66,11 @@ class RecordingRetriever:
         return self.places
 
 
+class FakeEmbeddingProvider:
+    def embed(self, *, model, texts):
+        return [[0.1, 0.2] for _ in texts]
+
+
 def intent(**updates) -> DiscoveryIntent:
     values = {
         "city": "turin",
@@ -80,24 +86,87 @@ def intent(**updates) -> DiscoveryIntent:
     return DiscoveryIntent.model_validate(values)
 
 
-def grounded(place_id: int = 10) -> GroundedResponse:
+def grounded(
+    place_id: int = 10,
+    *,
+    reason: str = "A museum.",
+    summary: str = "A museum recommendation.",
+) -> GroundedResponse:
     return GroundedResponse.model_validate(
         {
             "recommendations": [
-                {"place_id": place_id, "reason": "A museum."}
+                {"place_id": place_id, "reason": reason}
             ],
             "claims": [
                 {"place_id": place_id, "field": "category", "value": "museum"}
             ],
             "abstained": False,
-            "summary": "A museum recommendation.",
+            "summary": summary,
         }
     )
 
 
 class AssistantServiceTests(unittest.TestCase):
+    def test_semantic_evidence_is_validated_and_returned(self) -> None:
+        evidence = RetrievedEvidence(
+            id=31,
+            place_id=10,
+            title="Museo Test",
+            content="Description: A reviewed cinema collection.",
+            source_type="citybuddy_place",
+            source_url="https://www.openstreetmap.org/node/10",
+            attribution="OpenStreetMap contributors",
+            license="ODbL",
+            similarity=0.91,
+        )
+        grounded_output = GroundedResponse.model_validate(
+            {
+                "recommendations": [
+                    {
+                        "place_id": 10,
+                        "reason": "Its reviewed description highlights a cinema collection.",
+                        "evidence_ids": [31],
+                    }
+                ],
+                "claims": [
+                    {
+                        "place_id": 10,
+                        "field": "description",
+                        "value": "A reviewed cinema collection.",
+                    }
+                ],
+                "abstained": False,
+                "summary": "For cinema, Museo Test is the strongest match.",
+            }
+        )
+        retriever = RecordingRetriever([place(), place(place_id=11)])
+        service = AssistantService(
+            provider=SequenceProvider([intent(limit=1), grounded_output]),
+            model="fake",
+            retriever=retriever,
+            embedding_provider=FakeEmbeddingProvider(),
+            evidence_retriever=lambda database, **kwargs: [evidence],
+        )
+
+        response = service.respond(
+            object(), AssistantChatRequest(message="One museum for a cinema fan")
+        )
+
+        self.assertEqual(retriever.calls[0]["limit"], 1)
+        self.assertEqual(retriever.calls[0]["place_ids"], [10])
+        self.assertEqual(
+            response.answer, "For cinema, Museo Test is the strongest match."
+        )
+        self.assertEqual(response.recommendations[0].evidence[0].id, 31)
+        self.assertEqual(
+            response.recommendations[0].reason,
+            grounded_output.recommendations[0].reason,
+        )
+
     def test_missing_explicit_category_is_retried(self) -> None:
-        provider = SequenceProvider([intent(categories=[]), intent(limit=1)])
+        provider = SequenceProvider(
+            [intent(categories=[]), intent(limit=1), grounded()]
+        )
         retriever = RecordingRetriever([place()])
         service = AssistantService(
             provider=provider,
@@ -139,8 +208,8 @@ class AssistantServiceTests(unittest.TestCase):
         self.assertEqual(retriever.calls[0]["categories"], ["museum"])
         self.assertEqual(retriever.calls[0]["limit"], 1)
 
-    def test_single_candidate_skips_unnecessary_grounding_call(self) -> None:
-        provider = SequenceProvider([intent(limit=1)])
+    def test_single_candidate_receives_a_conversational_grounded_answer(self) -> None:
+        provider = SequenceProvider([intent(limit=1), grounded()])
         service = AssistantService(
             provider=provider,
             model="fake",
@@ -156,7 +225,7 @@ class AssistantServiceTests(unittest.TestCase):
         self.assertEqual(provider.outputs, [])
         self.assertEqual(
             response.answer,
-            "Here is one place that could be a good match.",
+            "A museum recommendation.",
         )
 
     def test_returns_only_validated_retrieved_recommendations(self) -> None:
@@ -172,7 +241,7 @@ class AssistantServiceTests(unittest.TestCase):
         self.assertEqual(response.provider_status, "available")
         self.assertTrue(response.grounded)
         self.assertEqual(response.recommendations[0].place.id, 10)
-        self.assertEqual(response.recommendations[0].reason, "Category: museum.")
+        self.assertEqual(response.recommendations[0].reason, "A museum.")
         self.assertEqual(retriever.calls[0]["categories"], ["museum"])
 
     def test_unretrieved_model_place_triggers_deterministic_fallback(self) -> None:
@@ -194,7 +263,7 @@ class AssistantServiceTests(unittest.TestCase):
         grounded_output = GroundedResponse.model_validate(
             {
                 "recommendations": [
-                    {"place_id": 10, "reason": "A museum."}
+                    {"place_id": 10, "reason": "R" * 240}
                 ],
                 "claims": [
                     {
@@ -219,7 +288,7 @@ class AssistantServiceTests(unittest.TestCase):
 
     def test_transport_is_detected_and_rendered_deterministically(self) -> None:
         service = AssistantService(
-            provider=SequenceProvider([intent()]),
+            provider=SequenceProvider([intent(), grounded()]),
             model="fake",
             retriever=RecordingRetriever([place()]),
         )
@@ -273,6 +342,7 @@ class AssistantServiceTests(unittest.TestCase):
             provider=SequenceProvider(
                 [
                     intent(unsupported_constraints=["unsupported_city"]),
+                    grounded(),
                 ]
             ),
             model="fake",
@@ -289,7 +359,7 @@ class AssistantServiceTests(unittest.TestCase):
     def test_explicit_singular_request_overrides_model_default_limit(self) -> None:
         retriever = RecordingRetriever([place()])
         service = AssistantService(
-            provider=SequenceProvider([intent(limit=5)]),
+            provider=SequenceProvider([intent(limit=5), grounded()]),
             model="fake",
             retriever=retriever,
         )
@@ -304,7 +374,7 @@ class AssistantServiceTests(unittest.TestCase):
     def test_radius_is_not_mistaken_for_result_count(self) -> None:
         retriever = RecordingRetriever([place()])
         service = AssistantService(
-            provider=SequenceProvider([intent(nearby=True, limit=5)]),
+            provider=SequenceProvider([intent(nearby=True, limit=5), grounded()]),
             model="fake",
             retriever=retriever,
         )
@@ -341,7 +411,15 @@ class AssistantServiceTests(unittest.TestCase):
 
     def test_explicit_language_overrides_model_language(self) -> None:
         service = AssistantService(
-            provider=SequenceProvider([intent(language="en", limit=1)]),
+            provider=SequenceProvider(
+                [
+                    intent(language="en", limit=1),
+                    grounded(
+                        reason="Una collezione cinematografica verificata.",
+                        summary="Ecco un luogo che potrebbe fare al caso tuo.",
+                    ),
+                ]
+            ),
             model="fake",
             retriever=RecordingRetriever([place()]),
         )
@@ -353,12 +431,15 @@ class AssistantServiceTests(unittest.TestCase):
 
         self.assertEqual(response.intent.language, "it")
         self.assertEqual(response.answer, "Ecco un luogo che potrebbe fare al caso tuo.")
-        self.assertEqual(response.recommendations[0].reason, "A reviewed cinema collection.")
+        self.assertEqual(
+            response.recommendations[0].reason,
+            "Una collezione cinematografica verificata.",
+        )
 
     def test_referential_follow_up_is_constrained_to_previous_places(self) -> None:
         retriever = RecordingRetriever([place()])
         service = AssistantService(
-            provider=SequenceProvider([intent(categories=[])]),
+            provider=SequenceProvider([intent(categories=[]), grounded()]),
             model="fake",
             retriever=retriever,
         )
@@ -376,7 +457,7 @@ class AssistantServiceTests(unittest.TestCase):
     def test_new_topic_is_not_constrained_to_previous_places(self) -> None:
         retriever = RecordingRetriever([place()])
         service = AssistantService(
-            provider=SequenceProvider([intent(categories=["park"])]),
+            provider=SequenceProvider([intent(categories=["park"]), grounded()]),
             model="fake",
             retriever=retriever,
         )

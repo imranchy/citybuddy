@@ -1,0 +1,24 @@
+{
+  "name": "citybuddy-rag-v1",
+  "version": 1,
+  "documents": [
+    {"id": "cinema", "text": "Museo dedicato alla storia del cinema, ai film e alla tecnologia cinematografica."},
+    {"id": "environment", "text": "Interactive environmental museum about sustainability, recycling and the natural world."},
+    {"id": "art", "text": "Gallery with a reviewed collection of modern and contemporary art."},
+    {"id": "park", "text": "Large public park with gardens, trees and outdoor walking paths."},
+    {"id": "market", "text": "Local covered market selling food, produce and regional products."},
+    {"id": "restaurant", "text": "Ristorante con cucina piemontese e piatti tradizionali di Torino."},
+    {"id": "library", "text": "Quiet public library for reading, studying and borrowing books."},
+    {"id": "nightlife", "text": "Live music venue and nightclub for evening entertainment."}
+  ],
+  "cases": [
+    {"key": "cinema_en", "query": "Which museum is best for someone interested in cinema?", "relevant_ids": ["cinema"]},
+    {"key": "cinema_it", "query": "Quale museo è adatto a chi ama il cinema?", "relevant_ids": ["cinema"]},
+    {"key": "outdoors_it", "query": "Vorrei passeggiare nel verde all'aperto", "relevant_ids": ["park"]},
+    {"key": "market_en", "query": "Where can I find a local food market?", "relevant_ids": ["market"]},
+    {"key": "food_en_to_it", "query": "Traditional Piedmontese restaurant", "relevant_ids": ["restaurant"]},
+    {"key": "reading_it_to_en", "query": "Un posto tranquillo per leggere e prendere libri in prestito", "relevant_ids": ["library"]},
+    {"key": "environment_it", "query": "Museo per imparare la sostenibilità e il riciclo", "relevant_ids": ["environment"]},
+    {"key": "nightlife_it_to_en", "query": "Musica dal vivo e vita notturna", "relevant_ids": ["nightlife"]}
+  ]
+}

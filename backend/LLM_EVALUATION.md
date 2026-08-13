@@ -122,3 +122,31 @@ a running model:
 ```cmd
 python -m unittest discover -s tests -v
 ```
+
+## Versioned conversational and RAG datasets
+
+`evaluation_datasets/conversations-v1.json` contains English and Italian
+multi-turn, nearby, transport-safety, unsupported-city, and live-fact cases.
+It is the repository source of truth. Synchronizing it to LangSmith is an
+explicit operation—not something enabled by an API key alone:
+
+```cmd
+python -m scripts.sync_langsmith_dataset
+```
+
+`evaluation_datasets/rag-v2.json` is the default multilingual retrieval
+benchmark. Its 68 cases cover every canonical leaf category in both English
+and Italian, including deliberately adjacent categories such as bar/pub,
+museum/gallery, park/garden, nightclub/music venue, hotel/hostel, and each
+distinct place-of-worship category. `rag-v1.json` remains as the original smoke
+test for comparison.
+After installing `bge-m3`, run:
+
+```cmd
+python -m scripts.evaluate_rag
+```
+
+The report records Recall@3 and mean reciprocal rank (MRR). It tests retrieval,
+not answer quality, and should be expanded with held-out production-like cases
+before deployment. JSON artifacts are local and ignored unless a reviewed
+baseline is deliberately copied into `evaluation_results`.

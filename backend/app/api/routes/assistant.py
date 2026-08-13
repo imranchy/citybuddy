@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.db.database import get_db
 from app.llm.ollama import OllamaProvider
+from app.llm.embeddings import OllamaEmbeddingProvider
 from app.schemas.assistant import AssistantChatRequest, AssistantChatResponse
 from app.services.assistant import AssistantService
 
@@ -22,6 +23,16 @@ def get_assistant_service() -> AssistantService:
             timeout_seconds=settings.ollama_timeout_seconds,
         ),
         model=settings.ollama_model,
+        embedding_provider=(
+            OllamaEmbeddingProvider(
+                base_url=settings.ollama_base_url,
+                timeout_seconds=max(settings.ollama_timeout_seconds, 120),
+            )
+            if settings.rag_enabled
+            else None
+        ),
+        embedding_model=settings.ollama_embedding_model,
+        evidence_limit=settings.rag_evidence_limit,
     )
 
 

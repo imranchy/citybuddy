@@ -21,6 +21,17 @@ export type AssistantRecommendation = {
   reason: string;
   distance_km: number | null;
   transit_url: string | null;
+  evidence: AssistantEvidence[];
+};
+
+export type AssistantEvidence = {
+  id: number;
+  title: string;
+  excerpt: string;
+  source_type: string;
+  source_url: string | null;
+  attribution: string | null;
+  license: string | null;
 };
 
 export type AssistantChatRequest = {

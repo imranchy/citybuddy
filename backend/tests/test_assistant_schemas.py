@@ -2,7 +2,7 @@ import unittest
 
 from pydantic import ValidationError
 
-from app.schemas.assistant import AssistantChatRequest
+from app.schemas.assistant import AssistantChatRequest, AssistantEvidence
 
 
 class AssistantRequestSchemaTests(unittest.TestCase):
@@ -37,6 +37,24 @@ class AssistantRequestSchemaTests(unittest.TestCase):
 
         with self.assertRaises(ValidationError):
             AssistantChatRequest(message="Hello", language="fr")
+
+    def test_evidence_requires_a_bounded_excerpt(self) -> None:
+        evidence = AssistantEvidence(
+            id=1,
+            title="Museo Test",
+            excerpt="Reviewed evidence.",
+            source_type="citybuddy_place",
+            attribution="OpenStreetMap contributors",
+            license="ODbL",
+        )
+        self.assertEqual(evidence.license, "ODbL")
+        with self.assertRaises(ValidationError):
+            AssistantEvidence(
+                id=1,
+                title="Museo Test",
+                excerpt="x" * 501,
+                source_type="citybuddy_place",
+            )
 
 
 if __name__ == "__main__":

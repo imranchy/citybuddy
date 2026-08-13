@@ -1,0 +1,18 @@
+{
+  "name": "citybuddy-grounded-conversations-v1",
+  "version": 1,
+  "cases": [
+    {"key": "museum_en", "inputs": {"message": "Recommend two museums in Turin.", "language": "en"}, "outputs": {"categories": ["museum"], "limit": 2, "city": "turin"}},
+    {"key": "museum_it", "inputs": {"message": "Consigliami due musei a Torino.", "language": "it"}, "outputs": {"categories": ["museum"], "limit": 2, "city": "turin"}},
+    {"key": "cinema_follow_up_en", "inputs": {"message": "Which one is better for someone interested in cinema?", "language": "en", "context_required": true}, "outputs": {"must_use_evidence": true, "must_not_invent": true}},
+    {"key": "cinema_follow_up_it", "inputs": {"message": "Quale consiglieresti a una persona interessata al cinema?", "language": "it", "context_required": true}, "outputs": {"must_use_evidence": true, "must_not_invent": true}},
+    {"key": "nearby_park_en", "inputs": {"message": "Find parks near me within 2 kilometres.", "language": "en"}, "outputs": {"categories": ["park"], "nearby": true, "radius_km": 2}},
+    {"key": "nearby_park_it", "inputs": {"message": "Trova parchi vicino a me entro 2 chilometri.", "language": "it"}, "outputs": {"categories": ["park"], "nearby": true, "radius_km": 2}},
+    {"key": "transport_en", "inputs": {"message": "Recommend a museum and tell me how to reach it by public transport.", "language": "en"}, "outputs": {"wants_transport": true, "must_not_generate_route": true}},
+    {"key": "transport_it", "inputs": {"message": "Consigliami un museo e dimmi come arrivarci con i mezzi pubblici.", "language": "it"}, "outputs": {"wants_transport": true, "must_not_generate_route": true}},
+    {"key": "unsupported_city", "inputs": {"message": "Find a cafe in Lisbon.", "language": "en"}, "outputs": {"city": "lisbon", "no_recommendations": true}},
+    {"key": "missing_live_fact", "inputs": {"message": "Which museum is open right now?", "language": "en"}, "outputs": {"must_abstain_from_live_status": true}},
+    {"key": "new_topic", "inputs": {"message": "Now show me three parks instead.", "language": "en", "context_required": false}, "outputs": {"categories": ["park"], "limit": 3}},
+    {"key": "all_categories", "inputs": {"message": "Suggest culture, nature, nightlife, shopping, community, worship and accommodation options.", "language": "en"}, "outputs": {"broad_discovery": true}}
+  ]
+}

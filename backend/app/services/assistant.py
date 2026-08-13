@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+from dataclasses import asdict
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
@@ -13,14 +14,17 @@ from app.core.maps import (
 )
 from app.core.place_catalog import CATEGORY_DEFINITIONS
 from app.llm.base import StructuredLLMProvider
+from app.llm.embeddings import EmbeddingProvider
 from app.llm.prompts import ASSISTANT_RESPONSE_SYSTEM_PROMPT, INTENT_SYSTEM_PROMPT
 from app.llm.schemas import DiscoveryIntent, GroundedClaim, GroundedResponse
 from app.schemas.assistant import (
     AssistantChatRequest,
     AssistantChatResponse,
+    AssistantEvidence,
     AssistantRecommendation,
 )
 from app.services.place_types import RetrievedPlace
+from app.services.rag import RetrievedEvidence
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session
@@ -30,6 +34,7 @@ logger = logging.getLogger(__name__)
 
 
 PlaceRetriever = Callable[..., list[RetrievedPlace]]
+EvidenceRetriever = Callable[..., list[RetrievedEvidence]]
 
 TRANSPORT_TERMS = (
     "public transport",
@@ -102,7 +107,11 @@ class IntentValidationError(RuntimeError):
 def _conversation_prompt(request: AssistantChatRequest) -> str:
     history = [message.model_dump() for message in request.history]
     return json.dumps(
-        {"conversation_history": history, "current_user_message": request.message},
+        {
+            "conversation_history": history,
+            "current_user_message": request.message,
+            "required_response_language": request.language,
+        },
         ensure_ascii=False,
     )
 
@@ -175,6 +184,7 @@ def _grounding_prompt(
     request: AssistantChatRequest,
     intent: DiscoveryIntent,
     places: list[RetrievedPlace],
+    evidence: list[RetrievedEvidence],
 ) -> str:
     return json.dumps(
         {
@@ -182,6 +192,7 @@ def _grounding_prompt(
             "current_user_message": request.message,
             "validated_intent": intent.model_dump(),
             "retrieved_records": [_record(place) for place in places],
+            "retrieved_evidence": [asdict(item) for item in evidence],
         },
         ensure_ascii=False,
     )
@@ -199,11 +210,15 @@ def _claim_is_supported(claim: GroundedClaim, record: dict[str, Any]) -> bool:
 def _validate_grounded_response(
     response: GroundedResponse,
     places: list[RetrievedPlace],
+    evidence: list[RetrievedEvidence],
+    result_limit: int,
 ) -> dict[int, list[GroundedClaim]]:
     records = {place.place.id: _record(place) for place in places}
     recommendation_ids = [item.place_id for item in response.recommendations]
     if len(recommendation_ids) != len(set(recommendation_ids)):
         raise GroundingValidationError("The model returned duplicate place IDs.")
+    if len(recommendation_ids) > result_limit:
+        raise GroundingValidationError("The model exceeded the requested result limit.")
     if not set(recommendation_ids).issubset(records):
         raise GroundingValidationError("The model referenced an unretrieved place.")
     if response.abstained and (response.recommendations or response.claims):
@@ -220,6 +235,21 @@ def _validate_grounded_response(
 
     if any(place_id not in claims_by_place for place_id in recommendation_ids):
         raise GroundingValidationError("A recommendation had no supporting claim.")
+
+    evidence_by_id = {item.id: item for item in evidence}
+    evidence_place_ids = {item.place_id for item in evidence}
+    for recommendation in response.recommendations:
+        if any(
+            evidence_id not in evidence_by_id
+            or evidence_by_id[evidence_id].place_id != recommendation.place_id
+            for evidence_id in recommendation.evidence_ids
+        ):
+            raise GroundingValidationError("A recommendation cited invalid evidence.")
+        if (
+            recommendation.place_id in evidence_place_ids
+            and not recommendation.evidence_ids
+        ):
+            raise GroundingValidationError("Available evidence was not cited.")
     return claims_by_place
 
 
@@ -272,10 +302,18 @@ class AssistantService:
         provider: StructuredLLMProvider,
         model: str,
         retriever: PlaceRetriever | None = None,
+        embedding_provider: EmbeddingProvider | None = None,
+        embedding_model: str = "bge-m3",
+        evidence_retriever: EvidenceRetriever | None = None,
+        evidence_limit: int = 8,
     ) -> None:
         self.provider = provider
         self.model = model
         self.retriever = retriever
+        self.embedding_provider = embedding_provider
+        self.embedding_model = embedding_model
+        self.evidence_retriever = evidence_retriever
+        self.evidence_limit = evidence_limit
 
     def respond(
         self,
@@ -400,44 +438,123 @@ class AssistantService:
             request.context_place_ids
             and _refers_to_previous_places(request.message)
         )
+        evidence: list[RetrievedEvidence] = []
+        semantic_place_ids: list[int] = []
+        if self.embedding_provider is not None:
+            evidence_retriever = self.evidence_retriever
+            if evidence_retriever is None:
+                from app.services.rag import retrieve_evidence
+
+                evidence_retriever = retrieve_evidence
+            try:
+                query_vector = self.embedding_provider.embed(
+                    model=self.embedding_model,
+                    texts=[request.message],
+                )[0]
+                evidence = evidence_retriever(
+                    database,
+                    query_embedding=query_vector,
+                    city=intent.city,
+                    categories=intent.categories,
+                    place_ids=(
+                        request.context_place_ids if contextual_follow_up else None
+                    ),
+                    latitude=request.latitude if intent.nearby else None,
+                    longitude=request.longitude if intent.nearby else None,
+                    radius_km=request.radius_km or intent.radius_km,
+                    limit=self.evidence_limit,
+                )
+                semantic_place_ids = list(
+                    dict.fromkeys(item.place_id for item in evidence)
+                )
+            except Exception as error:
+                logger.warning(
+                    "Assistant evidence retrieval failed: %s", type(error).__name__
+                )
+                warnings.append(
+                    "La ricerca semantica non era disponibile; sono stati usati dati verificati."
+                    if request.language == "it"
+                    else "Semantic evidence was unavailable; verified place data was used."
+                )
+
+        # Semantic search runs across every eligible indexed place before this
+        # controlled candidate shortlist is materialized.
+        candidate_ids = (
+            semantic_place_ids
+            or (request.context_place_ids if contextual_follow_up else None)
+        )
+        candidate_limit = min(
+            max(len(semantic_place_ids), intent.limit), 10
+        )
         places = retriever(
             database,
             city=intent.city,
             categories=intent.categories,
-            limit=intent.limit,
+            limit=candidate_limit,
             latitude=request.latitude if intent.nearby else None,
             longitude=request.longitude if intent.nearby else None,
             radius_km=request.radius_km or intent.radius_km,
-            place_ids=request.context_place_ids if contextual_follow_up else None,
+            place_ids=candidate_ids,
         )
+        if semantic_place_ids:
+            semantic_order = {
+                place_id: index for index, place_id in enumerate(semantic_place_ids)
+            }
+            places.sort(
+                key=lambda item: semantic_order.get(
+                    item.place.id, len(semantic_order)
+                )
+            )
+        retrieved_ids = {place.place.id for place in places}
+        evidence = [item for item in evidence if item.place_id in retrieved_ids]
 
         if "live_opening_status" in intent.unsupported_constraints:
             warnings.append(
-                "CityBuddy cannot verify whether a place is open right now; "
+                "CityBuddy non può verificare se un luogo è aperto in questo momento; "
+                "controlla le informazioni aggiornate prima della visita."
+                if request.language == "it"
+                else "CityBuddy cannot verify whether a place is open right now; "
                 "check current information before visiting."
             )
         if "unverified_rating" in intent.unsupported_constraints:
             warnings.append(
-                "CityBuddy cannot verify the requested external rating or award."
+                "CityBuddy non può verificare la valutazione o il premio esterno richiesto."
+                if request.language == "it"
+                else "CityBuddy cannot verify the requested external rating or award."
             )
 
-        selected = places
+        selected = places[: intent.limit]
         claims_by_place: dict[int, list[GroundedClaim]] = {}
-        if provider_available and len(places) > 1:
+        reasons_by_place: dict[int, str] = {}
+        evidence_ids_by_place: dict[int, list[int]] = {}
+        conversational_answer: str | None = None
+        # A final grounded generation makes even a single result conversational.
+        # Deterministic validation and fallback still own factual safety.
+        if provider_available and places:
             try:
                 response_call = self.provider.generate_structured(
                     model=self.model,
                     system_prompt=ASSISTANT_RESPONSE_SYSTEM_PROMPT,
-                    user_prompt=_grounding_prompt(request, intent, places),
+                    user_prompt=_grounding_prompt(request, intent, places, evidence),
                     output_schema=GroundedResponse,
                 )
                 grounded = GroundedResponse.model_validate(response_call.output)
-                claims_by_place = _validate_grounded_response(grounded, places)
+                claims_by_place = _validate_grounded_response(
+                    grounded, places, evidence, intent.limit
+                )
                 selected_by_id = {place.place.id: place for place in places}
                 selected = [
                     selected_by_id[item.place_id]
                     for item in grounded.recommendations
                 ]
+                reasons_by_place = {
+                    item.place_id: item.reason for item in grounded.recommendations
+                }
+                evidence_ids_by_place = {
+                    item.place_id: item.evidence_ids
+                    for item in grounded.recommendations
+                }
+                conversational_answer = grounded.summary
             except Exception as error:
                 logger.warning(
                     "Assistant grounding validation failed: %s",
@@ -458,12 +575,28 @@ class AssistantService:
             AssistantRecommendation(
                 place=place.place,
                 reason=(
-                    _fact_reason(
-                        claims_by_place[place.place.id], place, request.language
+                    reasons_by_place.get(place.place.id)
+                    or (
+                        _fact_reason(
+                            claims_by_place[place.place.id], place, request.language
+                        )
+                        if place.place.id in claims_by_place
+                        else _fallback_reason(place, request.language)
                     )
-                    if place.place.id in claims_by_place
-                    else _fallback_reason(place, request.language)
                 ),
+                evidence=[
+                    AssistantEvidence(
+                        id=item.id,
+                        title=item.title,
+                        excerpt=item.content[:500],
+                        source_type=item.source_type,
+                        source_url=item.source_url,
+                        attribution=item.attribution,
+                        license=item.license,
+                    )
+                    for item in evidence
+                    if item.id in evidence_ids_by_place.get(place.place.id, [])
+                ],
                 distance_km=place.distance_km,
                 transit_url=(
                     get_google_maps_transit_url(
@@ -477,7 +610,7 @@ class AssistantService:
             for place in selected
         ]
         return AssistantChatResponse(
-            answer=_answer_text(
+            answer=conversational_answer or _answer_text(
                 count=len(recommendations),
                 language=intent.language,
                 fallback=not provider_available,

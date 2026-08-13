@@ -22,6 +22,34 @@ database access, factual validation, transport URLs, and safety disclaimers.
 The final answer and reasons are rendered from validated database facts rather
 than returning unrestricted model prose.
 
+## Grounded semantic evidence (Milestone A)
+
+Approved production place rows can be converted into attributed evidence and
+embedded locally with Ollama `bge-m3`. PostgreSQL stores the 1024-dimensional
+vectors through pgvector. The assistant embeds the current request and ranks
+evidence across all reviewed places that pass deterministic city, category,
+geographic and conversation-context filters. It then materializes a small
+candidate shortlist for the conversational model. This prevents an alphabetic
+SQL limit from excluding the best semantic match. Every returned evidence ID
+is checked against its place before it is exposed by the API.
+
+Evidence remains available to backend validation and evaluation, but the
+standard user interface does not display raw evidence excerpts or source
+metadata. Users receive the grounded explanation and one Google Maps action.
+A separate transit action appears only when public transport was requested.
+
+The indexer remains preview-first and never imports external documents:
+
+```cmd
+ollama pull bge-m3
+python -m scripts.index_place_evidence --city Torino
+python -m scripts.index_place_evidence --city Torino --apply
+```
+
+Re-running the command indexes only new or changed fingerprints. It is safe to
+run after an approved staging promotion; it does not promote staged places and
+does not bypass the ingestion review boundary.
+
 ## Example request
 
 ```json
@@ -51,6 +79,8 @@ milestone, so no chat transcript is stored in the database.
 - Only reviewed rows returned by the controlled retrieval service are eligible.
 - Every model-selected place ID must be present in those retrieved rows.
 - Every recommendation needs at least one exact, non-null database claim.
+- When retrieved semantic evidence exists, every recommendation must cite valid
+  evidence belonging to that same place.
 - Unknown IDs, unsupported attributes, contradictions, duplicate IDs, and
   malformed abstentions cause deterministic fallback.
 - When Ollama is unavailable or output validation fails, CityBuddy returns

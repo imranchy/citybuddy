@@ -1,6 +1,6 @@
 import Image from "next/image";
 
-import { getGoogleDirectionsUrl, getGoogleMapsUrl } from "@/lib/maps";
+import { getGoogleMapsUrl } from "@/lib/maps";
 import type { AssistantRecommendation } from "@/types/assistant";
 
 type Props = {
@@ -13,8 +13,8 @@ export default function AssistantPlaceCard({ recommendation, language }: Props) 
   const image = place.primary_image;
   const imageUrl = image?.thumbnail_url ?? image?.image_url;
   const labels = language === "it"
-    ? { why: "Perché è adatto", map: "Apri in Maps", directions: "Indicazioni", transit: "Mezzi pubblici", details: "Altri dettagli" }
-    : { why: "Why it matches", map: "Open in Maps", directions: "Directions", transit: "Public transport", details: "More details" };
+    ? { why: "Perché è adatto", map: "Apri in Maps", transit: "Mezzi pubblici", details: "Altri dettagli" }
+    : { why: "Why it matches", map: "Open in Maps", transit: "Public transport", details: "More details" };
 
   return (
     <article className="overflow-hidden rounded-2xl border border-white/10 bg-[#0B112B]/70">
@@ -44,7 +44,6 @@ export default function AssistantPlaceCard({ recommendation, language }: Props) 
         <p className="mt-1 text-sm leading-6 text-[#FFF8E7]">{recommendation.reason}</p>
         <div className="mt-3 flex flex-wrap gap-2">
           <a href={getGoogleMapsUrl(place)} target="_blank" rel="noopener noreferrer" className="rounded-lg border border-white/10 px-3 py-2 text-xs hover:border-[#FF6846]/50">{labels.map}</a>
-          <a href={getGoogleDirectionsUrl(place)} target="_blank" rel="noopener noreferrer" className="rounded-lg bg-[#FF6846] px-3 py-2 text-xs font-semibold text-[#070B24]">{labels.directions}</a>
           {recommendation.transit_url && (
             <a href={recommendation.transit_url} target="_blank" rel="noopener noreferrer" className="rounded-lg bg-[#FFC83D] px-3 py-2 text-xs font-semibold text-[#070B24]">{labels.transit}</a>
           )}

@@ -61,6 +61,7 @@ class GroundedRecommendation(BaseModel):
 
     place_id: int
     reason: str = Field(min_length=1, max_length=240)
+    evidence_ids: list[int] = Field(default_factory=list, max_length=5)
 
 
 class GroundedClaim(BaseModel):
@@ -88,7 +89,7 @@ class GroundedResponse(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    recommendations: list[GroundedRecommendation] = Field(max_length=5)
-    claims: list[GroundedClaim] = Field(max_length=15)
+    recommendations: list[GroundedRecommendation] = Field(max_length=10)
+    claims: list[GroundedClaim] = Field(max_length=30)
     abstained: bool
     summary: str = Field(min_length=1, max_length=500)
