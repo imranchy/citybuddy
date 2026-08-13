@@ -1,4 +1,8 @@
 import type { CategoryGroup, Place } from "@/types/place";
+import type {
+  AssistantChatRequest,
+  AssistantChatResponse,
+} from "@/types/assistant";
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
@@ -37,6 +41,27 @@ async function getJson<T>(
   }
 
   return response.json() as Promise<T>;
+}
+
+async function postJson<ResponseT, RequestT>(
+  path: string,
+  body: RequestT,
+  signal?: AbortSignal,
+): Promise<ResponseT> {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+    signal,
+  });
+
+  if (!response.ok) {
+    throw new Error(`API request failed with status ${response.status}`);
+  }
+
+  return response.json() as Promise<ResponseT>;
 }
 
 export function getHealth(
@@ -91,6 +116,17 @@ export function getNearbyPlaces(
 
   return getJson<Place[]>(
     `/api/places/nearby?${parameters.toString()}`,
+    signal,
+  );
+}
+
+export function sendAssistantMessage(
+  request: AssistantChatRequest,
+  signal?: AbortSignal,
+): Promise<AssistantChatResponse> {
+  return postJson<AssistantChatResponse, AssistantChatRequest>(
+    "/api/assistant/chat",
+    request,
     signal,
   );
 }

@@ -7,6 +7,8 @@ import {
 
 type PlaceCardProps = {
   place: Place;
+  recommendationReason?: string;
+  transitUrl?: string | null;
 };
 
 const categorySymbols: Record<string, string> = {
@@ -45,7 +47,11 @@ const categorySymbols: Record<string, string> = {
   viewpoint: "⌖",
 };
 
-export default function PlaceCard({ place }: PlaceCardProps) {
+export default function PlaceCard({
+  place,
+  recommendationReason,
+  transitUrl,
+}: PlaceCardProps) {
   const googleMapsUrl = getGoogleMapsUrl(place);
   const directionsUrl = getGoogleDirectionsUrl(place);
   const image = place.primary_image;
@@ -130,6 +136,17 @@ export default function PlaceCard({ place }: PlaceCardProps) {
         <p className="mt-4 leading-7 text-[#A9B1D6]">
           {place.description}
         </p>
+      )}
+
+      {recommendationReason && (
+        <div className="mt-5 rounded-2xl border border-[#FFC83D]/25 bg-[#FFC83D]/10 p-4">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#FFC83D]">
+            Why it matches
+          </p>
+          <p className="mt-2 text-sm leading-6 text-[#FFF8E7]">
+            {recommendationReason}
+          </p>
+        </div>
       )}
 
       <p className="mt-5 text-sm text-[#FFF8E7]">
@@ -219,6 +236,17 @@ export default function PlaceCard({ place }: PlaceCardProps) {
         >
           Get directions
         </a>
+
+        {transitUrl && (
+          <a
+            href={transitUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="rounded-xl bg-[#FFC83D] px-4 py-2 text-sm font-semibold text-[#070B24] transition hover:bg-[#FFD66B]"
+          >
+            Public transport
+          </a>
+        )}
       </div>
 
       <p className="mt-5 text-xs text-[#A9B1D6]/70">

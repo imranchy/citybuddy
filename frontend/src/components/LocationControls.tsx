@@ -39,7 +39,7 @@ export default function LocationControls({
         >
           <option value={1}>1 km</option>
           <option value={2}>2 km</option>
-          <option>value={3}3 Km</option>
+          <option value={3}>3 km</option>
           <option value={4}>4 km</option>
           <option value={5}>5 km</option>
         </select>

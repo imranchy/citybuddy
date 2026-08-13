@@ -1,8 +1,9 @@
 "use client";
 
 import Image from "next/image";
-import { FormEvent, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { getHealth } from "@/lib/api";
+import AssistantChat from "@/components/AssistantChat";
 import PlacesSection from "@/components/PlacesSection";
 
 const suggestedSearches = [
@@ -50,10 +51,8 @@ const features = [
 ];
 
 export default function Home() {
-  const [query, setQuery] = useState("");
   const [apiStatus, setApiStatus] = useState("Connecting...");
   const [isApiConnected, setIsApiConnected] = useState(false);
-  const [message, setMessage] = useState("");
 
   useEffect(() => {
     const controller = new AbortController();
@@ -78,19 +77,6 @@ export default function Home() {
     return () => controller.abort();
   }, []);
 
-  function handleSearch(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
-    if (!query.trim()) {
-      setMessage("Describe what kind of place you are looking for.");
-      return;
-    }
-
-    setMessage(
-      `Search received: “${query}”. The upcoming assistant will ground recommendations in reviewed CityBuddy place data.`,
-    );
-  }
-
   return (
     <main className="min-h-screen bg-[#070B24] text-[#FFF8E7]">
       <nav className="border-b border-white/10">
@@ -101,7 +87,7 @@ export default function Home() {
               alt="CityBuddy city guide"
               width={96}
               height={64}
-              priority
+              preload
               className="h-11 w-auto object-contain sm:h-14"
             />
 
@@ -170,63 +156,10 @@ export default function Home() {
             spaces, places of worship and more around your city.
           </p>
 
-          <form
-            onSubmit={handleSearch}
-            className="mx-auto mt-10 max-w-3xl rounded-3xl border border-white/10 bg-[#121936] p-3 shadow-2xl sm:mt-12"
-          >
-            <div className="flex flex-col gap-3 md:flex-row">
-              <label htmlFor="city-search" className="sr-only">
-                Describe the place you are looking for
-              </label>
-
-              <input
-                id="city-search"
-                name="query"
-                type="search"
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="A historic site, peaceful garden or local market near me..."
-                autoComplete="off"
-                className="min-h-14 min-w-0 flex-1 rounded-2xl border border-white/10 bg-[#0B112B] px-5 text-base text-[#FFF8E7] outline-none placeholder:text-[#A9B1D6]/60 focus:border-[#FF6846] focus:ring-2 focus:ring-[#FF6846]/30"
-              />
-
-              <button
-                type="submit"
-                className="min-h-14 rounded-2xl bg-[#FF6846] px-7 font-semibold text-[#070B24] transition hover:bg-[#FF826B] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FFC83D] focus-visible:ring-offset-2 focus-visible:ring-offset-[#121936] active:scale-[0.98]"
-              >
-                Find places
-              </button>
-            </div>
-
-            <div
-              aria-label="Suggested searches"
-              className="mt-3 flex gap-2 overflow-x-auto px-2 pb-2"
-            >
-              {suggestedSearches.map((suggestion) => (
-                <button
-                  key={suggestion.label}
-                  type="button"
-                  onClick={() => {
-                    setQuery(suggestion.query);
-                    setMessage("");
-                  }}
-                  className="min-h-9 shrink-0 rounded-full border border-white/10 px-3 py-1 text-xs text-[#A9B1D6] transition hover:border-[#FF6846]/50 hover:text-[#FFF8E7] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FFC83D]"
-                >
-                  {suggestion.label}
-                </button>
-              ))}
-            </div>
-          </form>
-
-          {message && (
-            <p
-              role="status"
-              aria-live="polite"
-              className="mx-auto mt-5 max-w-2xl rounded-2xl border border-[#FF6846]/25 bg-[#FF6846]/10 px-5 py-4 text-sm leading-6 text-[#FFF8E7]"
-            >
-              {message}
-            </p>
-          )}
+          <AssistantChat
+            suggestions={suggestedSearches}
+            isApiConnected={isApiConnected}
+          />
         </div>
       </section>
 
