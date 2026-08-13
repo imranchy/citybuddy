@@ -44,14 +44,13 @@ const features = [
   },
   {
     icon: "✓",
-    title: "Evidence backed",
+    title: "Clear recommendations",
     description:
-      "Understand why each place is recommended and where the supporting information comes from.",
+      "Get concise suggestions with useful reasons that match what you asked for.",
   },
 ];
 
 export default function Home() {
-  const [apiStatus, setApiStatus] = useState("Connecting...");
   const [isApiConnected, setIsApiConnected] = useState(false);
 
   useEffect(() => {
@@ -59,15 +58,13 @@ export default function Home() {
 
     async function loadHealth() {
       try {
-        const data = await getHealth(controller.signal);
-        setApiStatus(`${data.application} is ready`);
+        await getHealth(controller.signal);
         setIsApiConnected(true);
       } catch (error) {
         if (error instanceof Error && error.name === "AbortError") {
           return;
         }
 
-        setApiStatus("Connection unavailable");
         setIsApiConnected(false);
       }
     }
@@ -102,28 +99,6 @@ export default function Home() {
             </div>
           </div>
 
-          <div
-            role="status"
-            aria-live="polite"
-            className={`flex shrink-0 items-center gap-2 rounded-full border px-2.5 py-2 text-[11px] sm:px-3 sm:text-xs ${
-              isApiConnected
-                ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-300"
-                : "border-amber-400/30 bg-amber-400/10 text-amber-300"
-            }`}
-          >
-            <span
-              aria-hidden="true"
-              className={`h-2 w-2 rounded-full ${
-                isApiConnected ? "bg-emerald-400" : "bg-amber-400"
-              }`}
-            />
-
-            <span className="hidden sm:inline">{apiStatus}</span>
-
-            <span className="sm:hidden">
-              {isApiConnected ? "Ready" : "Offline"}
-            </span>
-          </div>
         </div>
       </nav>
 

@@ -15,16 +15,16 @@ type Props = { suggestions: SuggestedSearch[]; isApiConnected: boolean };
 const copy = {
   en: {
     input: "Ask about museums, parks, food, nightlife or places nearby…",
-    send: "Send", thinking: "Thinking…", you: "You", verified: "Verified CityBuddy information",
-    fallback: "Verified fallback", locate: "Use my location", locating: "Locating…", ready: "Location ready",
+    send: "Send", thinking: "Thinking…", you: "You",
+    locate: "Use my location", locating: "Locating…", ready: "Location ready",
     remove: "Remove location", reset: "New conversation", empty: "Tell CityBuddy what you would like to discover.",
     offline: "CityBuddy is offline. Start the backend and try again.", failure: "I could not complete that request. Please try again.",
     locationUsed: "Location is ready for nearby searches.", locationFailed: "Location permission was unavailable.",
   },
   it: {
     input: "Chiedi di musei, parchi, ristoranti, vita notturna o luoghi vicini…",
-    send: "Invia", thinking: "Sto cercando…", you: "Tu", verified: "Informazioni verificate da CityBuddy",
-    fallback: "Risultato verificato", locate: "Usa la mia posizione", locating: "Localizzazione…", ready: "Posizione pronta",
+    send: "Invia", thinking: "Sto cercando…", you: "Tu",
+    locate: "Usa la mia posizione", locating: "Localizzazione…", ready: "Posizione pronta",
     remove: "Rimuovi posizione", reset: "Nuova conversazione", empty: "Racconta a CityBuddy cosa vorresti scoprire.",
     offline: "CityBuddy non è disponibile. Avvia il backend e riprova.", failure: "Non sono riuscito a completare la richiesta. Riprova.",
     locationUsed: "La posizione è pronta per le ricerche nelle vicinanze.", locationFailed: "Non è stato possibile accedere alla posizione.",
@@ -141,7 +141,7 @@ export default function AssistantChat({ suggestions, isApiConnected }: Props) {
                 <article key={turn.id} className="space-y-3">
                   <div className="ml-auto max-w-2xl rounded-2xl rounded-br-md bg-[#FF6846] px-4 py-3 text-[#070B24]"><p className="text-[11px] font-bold uppercase tracking-wider opacity-70">{t.you}</p><p className="mt-1">{turn.question}</p></div>
                   <div className="max-w-3xl rounded-2xl rounded-tl-md border border-white/10 bg-[#0B112B]/60 p-4">
-                    <div className="flex flex-wrap items-center justify-between gap-2"><span className="text-xs font-semibold uppercase tracking-wider text-[#FFC83D]">CityBuddy</span><span className="rounded-full border border-emerald-400/25 px-2 py-1 text-[10px] text-emerald-300">{t.verified}</span></div>
+                    <div className="flex items-center"><span className="text-xs font-semibold uppercase tracking-wider text-[#FFC83D]">CityBuddy</span></div>
                     <p className="mt-3 leading-7">{turn.response.answer}</p>
                     {turn.response.transport_disclaimer && <p className="mt-3 rounded-xl border border-[#FFC83D]/20 bg-[#FFC83D]/10 p-3 text-sm leading-6">{turn.response.transport_disclaimer}</p>}
                     {turn.response.warnings.map((warning) => <p key={warning} className="mt-2 text-xs text-amber-200">{warning}</p>)}
