@@ -34,16 +34,16 @@ change retrieval scope.
 
 Approved production place rows can be converted into attributed evidence and
 embedded locally with Ollama `bge-m3`. PostgreSQL stores the 1024-dimensional
-vectors through pgvector. The assistant embeds the current request and ranks
-evidence across all reviewed places that pass deterministic city, category,
-geographic and conversation-context filters. It then materializes a small
-candidate shortlist for the conversational model. This prevents an alphabetic
-SQL limit from excluding the best semantic match. Every returned evidence ID
-is checked against its place before it is exposed by the API.
-
-Evidence remains available to backend validation and evaluation, but the
-standard user interface does not display raw evidence excerpts or source
-metadata. Users receive the grounded explanation and one Google Maps action.
+vectors through pgvector. For qualitative, indirect, or contextual requests the assistant embeds the current
+request and ranks evidence across reviewed places that pass deterministic city,
+category, geographic and conversation-context filters. Simple explicit category
+requests skip query embedding and use controlled database/PostGIS filtering directly,
+which avoids an unnecessary embedding-model load while preserving semantic retrieval
+for requests that benefit from it. It then materializes a small candidate shortlist
+for the conversational model. This prevents an alphabetic
+SQL limit from excluding the best semantic match. Every evidence ID selected by the response model is checked against its place.
+Evidence remains internal to backend grounding, validation, and evaluation; the
+public assistant response does not expose raw evidence excerpts or source metadata. Users receive the grounded explanation and one Google Maps action.
 A separate transit action appears only when public transport was requested.
 
 The indexer remains preview-first and never imports external documents:
@@ -112,7 +112,7 @@ Start PostgreSQL/PostGIS and Ollama, then run the API from `backend`:
 uvicorn app.main:app --reload
 ```
 
-The configured intent model defaults to `qwen3:4b`; the grounded response model
+The configured intent model defaults to `qwen3:8b`; the grounded response model
 defaults to `gemma3:12b-it-qat`. Both are served by the same provider-neutral
 interface and local Ollama API. Ollama hosts the models, while CityBuddy routes
 each application task to the configured role. Interactive API docs are
@@ -121,7 +121,7 @@ available at `http://127.0.0.1:8000/docs`.
 Before browser testing, run the intent-only benchmark and direct CLI assistant:
 
 ```cmd
-python -m scripts.evaluate_intent_models --model qwen3:4b --model qwen3:8b --model gemma3:12b-it-qat
+python -m scripts.evaluate_intent_models --model qwen3:8b --suite smoke
 python -m scripts.run_assistant_cli "Recommend two museums in Turin" --language en
 python -m scripts.run_assistant_cli "Consigliami due musei a Torino" --language it
 ```

@@ -36,17 +36,6 @@ class AssistantChatRequest(BaseModel):
         return self
 
 
-class AssistantEvidence(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    id: int
-    title: str
-    excerpt: str = Field(min_length=1, max_length=500)
-    source_type: str
-    source_url: str | None = None
-    attribution: str | None = None
-    license: str | None = None
-
 
 class AssistantRecommendation(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -55,7 +44,6 @@ class AssistantRecommendation(BaseModel):
     reason: str = Field(min_length=1, max_length=240)
     distance_km: float | None = None
     transit_url: str | None = None
-    evidence: list[AssistantEvidence] = Field(default_factory=list, max_length=5)
 
 
 class AssistantChatResponse(BaseModel):

@@ -29,7 +29,6 @@ from app.llm.schemas import (
 from app.schemas.assistant import (
     AssistantChatRequest,
     AssistantChatResponse,
-    AssistantEvidence,
     AssistantRecommendation,
 )
 from app.services.place_types import RetrievedPlace
@@ -53,6 +52,7 @@ TRANSPORT_TERMS = (
     "metro",
     "subway",
     "trasporto pubblico",
+    "mezzi pubblici",
     "autobus",
     "pullman",
 )
@@ -67,6 +67,8 @@ CONTEXT_REFERENCE_TERMS = (
     "this place",
     "that place",
     "quale",
+    "quale dei",
+    "quale delle",
     "tra questi",
     "fra questi",
     "il primo",
@@ -208,13 +210,15 @@ def _has_live_opening_request(message: str) -> bool:
     return any(re.search(pattern, normalized) for pattern in LIVE_OPENING_PATTERNS)
 
 
-def _deterministic_constraints(message: str, city: str) -> list[str]:
-    """Derive safety/capability flags from the user message, not model guesses."""
+def _deterministic_constraints(
+    message: str, city: str, *, wants_transport: bool = False
+) -> list[str]:
+    """Derive final safety/capability flags after semantic intent normalization."""
 
     normalized = message.casefold()
     constraints: list[str] = []
 
-    if _asks_for_transport(message):
+    if wants_transport or _asks_for_transport(message):
         constraints.append("live_transport")
     if _has_live_opening_request(message):
         constraints.append("live_opening_status")
@@ -332,6 +336,7 @@ def normalize_discovery_intent(
     explicit_radius = request.radius_km or _requested_radius_km(request.message)
     nearby = _asks_for_nearby(request.message) or explicit_radius is not None
 
+    wants_transport = bool(intent.wants_transport) or _asks_for_transport(request.message)
     normalized = {
         "language": request.language,
         "city": validated_city,
@@ -339,10 +344,11 @@ def normalize_discovery_intent(
         "limit": _requested_limit(request.message, categories) or 5,
         "nearby": nearby,
         "radius_km": explicit_radius if nearby else None,
-        "wants_transport": _asks_for_transport(request.message),
+        "wants_transport": wants_transport,
         "unsupported_constraints": _deterministic_constraints(
             request.message,
             validated_city,
+            wants_transport=wants_transport,
         ),
     }
     return DiscoveryIntent.model_validate(normalized)
@@ -444,6 +450,19 @@ def _fact_reason(
     return f"{label}: {preferred.value}."[:240]
 
 
+def _sanitize_user_text(text: str) -> str:
+    """Remove internal structured identifiers from user-visible model prose."""
+
+    sanitized = re.sub(
+        r"\s*\(?\b(?:place\s+)?id\s*[:#]?\s*\d+\)?",
+        "",
+        text,
+        flags=re.IGNORECASE,
+    )
+    sanitized = re.sub(r"\s+([,.;:!?])", r"\1", sanitized)
+    return " ".join(sanitized.split())
+
+
 def _fallback_reason(place: RetrievedPlace, language: str) -> str:
     if place.place.description:
         return place.place.description[:240]
@@ -509,6 +528,8 @@ class AssistantService:
         provider_available = True
         explicit_categories = _explicit_categories(request.message)
         intent: DiscoveryIntent | None = None
+        model_refers_to_context = False
+        model_needs_semantic_retrieval = False
         last_error: Exception | None = None
         intent_attempt_models = [self.intent_model, self.intent_model]
         if self.response_model != self.intent_model:
@@ -549,6 +570,8 @@ class AssistantService:
                         "The model omitted an explicitly named supported category."
                     )
                 intent = candidate
+                model_refers_to_context = raw_candidate.refers_to_context
+                model_needs_semantic_retrieval = raw_candidate.needs_semantic_retrieval
                 if (
                     intent_model == self.response_model
                     and self.response_model != self.intent_model
@@ -620,11 +643,19 @@ class AssistantService:
 
         contextual_follow_up = bool(
             request.context_place_ids
-            and _refers_to_previous_places(request.message)
+            and (model_refers_to_context or _refers_to_previous_places(request.message))
+        )
+        use_semantic_retrieval = bool(
+            self.embedding_provider is not None
+            and (
+                model_needs_semantic_retrieval
+                or contextual_follow_up
+                or not explicit_categories
+            )
         )
         evidence: list[RetrievedEvidence] = []
         semantic_place_ids: list[int] = []
-        if self.embedding_provider is not None:
+        if use_semantic_retrieval:
             evidence_retriever = self.evidence_retriever
             if evidence_retriever is None:
                 from app.services.rag import retrieve_evidence
@@ -710,7 +741,6 @@ class AssistantService:
         selected = places[: intent.limit]
         claims_by_place: dict[int, list[GroundedClaim]] = {}
         reasons_by_place: dict[int, str] = {}
-        evidence_ids_by_place: dict[int, list[int]] = {}
         conversational_answer: str | None = None
         # A final grounded generation makes even a single result conversational.
         # Deterministic validation and fallback still own factual safety.
@@ -732,13 +762,9 @@ class AssistantService:
                     for item in grounded.recommendations
                 ]
                 reasons_by_place = {
-                    item.place_id: item.reason for item in grounded.recommendations
+                    item.place_id: _sanitize_user_text(item.reason) for item in grounded.recommendations
                 }
-                evidence_ids_by_place = {
-                    item.place_id: item.evidence_ids
-                    for item in grounded.recommendations
-                }
-                conversational_answer = grounded.summary
+                conversational_answer = _sanitize_user_text(grounded.summary)
             except Exception as error:
                 logger.warning(
                     "Assistant grounding validation failed: %s",
@@ -768,19 +794,6 @@ class AssistantService:
                         else _fallback_reason(place, request.language)
                     )
                 ),
-                evidence=[
-                    AssistantEvidence(
-                        id=item.id,
-                        title=item.title,
-                        excerpt=item.content[:500],
-                        source_type=item.source_type,
-                        source_url=item.source_url,
-                        attribution=item.attribution,
-                        license=item.license,
-                    )
-                    for item in evidence
-                    if item.id in evidence_ids_by_place.get(place.place.id, [])
-                ],
                 distance_km=place.distance_km,
                 transit_url=(
                     get_google_maps_transit_url(

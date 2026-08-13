@@ -45,8 +45,9 @@ generation. To select a smaller routing model without paying for grounding
 calls, run the intent-only benchmark:
 
 ```cmd
-ollama pull qwen3:4b
-python -m scripts.evaluate_intent_models --model qwen3:4b --model qwen3:8b --model gemma3:12b-it-qat
+ollama pull qwen3:8b
+python -m scripts.evaluate_intent_models --model qwen3:8b --suite smoke
+python -m scripts.evaluate_intent_models --model qwen3:8b --suite full
 ```
 
 This runs 13 capability/safety cases plus 68 English/Italian taxonomy cases
@@ -60,10 +61,7 @@ requires 100% schema validity, zero errors, and strong results on safety fields
 such as unsupported city, live facts, nearby radius, and transport intent. A
 single aggregate score is not sufficient. Reports are local under `artifacts`.
 
-CityBuddy defaults to `qwen3:4b` as the intent candidate and
-`gemma3:12b-it-qat` as the response model. The intent benchmark is the gate:
-if `qwen3:4b` does not meet the application checks or model swapping is slower,
-set `OLLAMA_INTENT_MODEL=gemma3:12b-it-qat` until another candidate passes.
+CityBuddy currently uses `qwen3:8b` for intent and `gemma3:12b-it-qat` for grounded responses. The accepted local benchmark baseline is 78/81 strict cases (96.3%), 98.8% normalized field accuracy, 100% schema validity, zero provider/schema/timeout errors, and about 0.90 s warm p95 on the tested GPU. The three known misses are taxonomy-granularity cases rather than capability/safety failures.
 
 ## Optional LangSmith traces
 

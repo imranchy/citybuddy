@@ -20,6 +20,8 @@ class RawDiscoveryIntent(BaseModel):
     nearby: bool = False
     radius_km: float | None = None
     wants_transport: bool = False
+    refers_to_context: bool = False
+    needs_semantic_retrieval: bool = False
     language: str = "en"
     unsupported_constraints: list[str] = Field(default_factory=list, max_length=16)
 

@@ -43,6 +43,16 @@ class RawDiscoveryIntentSchemaTests(unittest.TestCase):
         self.assertEqual(intent.categories, ["parco"])
         self.assertEqual(intent.radius_km, 2)
 
+    def test_raw_intent_accepts_semantic_routing_flags(self) -> None:
+        intent = RawDiscoveryIntent(
+            wants_transport=True,
+            refers_to_context=True,
+            needs_semantic_retrieval=True,
+        )
+        self.assertTrue(intent.wants_transport)
+        self.assertTrue(intent.refers_to_context)
+        self.assertTrue(intent.needs_semantic_retrieval)
+
     def test_raw_intent_still_rejects_extra_fields(self) -> None:
         with self.assertRaises(ValidationError):
             RawDiscoveryIntent.model_validate(

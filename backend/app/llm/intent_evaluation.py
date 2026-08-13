@@ -111,7 +111,10 @@ def _raw_semantic_checks(
         if isinstance(case, CategoryIntentCase)
         else list(case.categories)
     )
-    return {"categories": set(intent.categories) == set(expected_categories)}
+    checks = {"categories": set(intent.categories) == set(expected_categories)}
+    if isinstance(case, IntentCase):
+        checks["wants_transport"] = intent.wants_transport == case.wants_transport
+    return checks
 
 
 def _normalized_checks(
