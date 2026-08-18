@@ -5,15 +5,17 @@ from pydantic import Field
 
 from app.db.database import SessionLocal
 from app.schemas.place import PlaceRead
+from app.services.official_site import OfficialPageType, OfficialSiteEvidence
 from app.tools.citybuddy import PlaceSearchInput, PlaceSearchResult, get_place, search_places
+from app.tools.official_site import get_official_place_page as retrieve_official_place_page
 
 
 mcp = MCPServer(
     "CityBuddy",
     instructions=(
-        "Use only these bounded CityBuddy tools for reviewed place data. "
-        "This server does not expose arbitrary SQL, URLs, shell commands, "
-        "filesystem access, or production write operations."
+        "Use only these bounded CityBuddy tools for reviewed place data and controlled "
+        "official-site evidence. This server does not expose arbitrary SQL, caller-supplied "
+        "URLs, shell commands, filesystem access, generic web search, or production writes."
     ),
 )
 
@@ -49,6 +51,21 @@ def get_place_details(
 
     with SessionLocal() as database:
         return get_place(database, place_id=place_id)
+
+
+@mcp.tool()
+def get_official_place_page(
+    place_id: Annotated[int, Field(gt=0)],
+    page_type: OfficialPageType = "general",
+) -> OfficialSiteEvidence:
+    """Fetch bounded live text from a reviewed place's stored official website only."""
+
+    with SessionLocal() as database:
+        return retrieve_official_place_page(
+            database,
+            place_id=place_id,
+            page_type=page_type,
+        )
 
 
 def main() -> None:
