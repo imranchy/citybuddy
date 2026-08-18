@@ -118,3 +118,19 @@ def retrieve_places(
         )
         for row in rows
     ]
+
+def retrieve_place_by_id(
+    database: Session,
+    *,
+    place_id: int,
+) -> PlaceRead | None:
+    """Retrieve one reviewed production place through a fixed primary-key filter."""
+
+    statement = select(*_place_columns()).where(
+        Place.id == place_id,
+        Place.category.in_(DESTINATION_CATEGORIES),
+    )
+    row = database.execute(statement).mappings().one_or_none()
+    if row is None:
+        return None
+    return PlaceRead.model_validate(dict(row))

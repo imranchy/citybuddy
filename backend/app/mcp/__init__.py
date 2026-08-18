@@ -1,0 +1,1 @@
+"""CityBuddy MCP server package."""
