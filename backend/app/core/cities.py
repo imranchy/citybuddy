@@ -28,7 +28,7 @@ CITIES: dict[str, CityConfig] = {
         bounding_box=(44.9580, 7.5770, 45.1330, 7.7730),
         center=(45.0703, 7.6869),
         default_language="it",
-        supported_languages=("it", "en"),
+        supported_languages=("en", "it", "pt", "de", "bn"),
         timezone="Europe/Rome",
     ),
 }

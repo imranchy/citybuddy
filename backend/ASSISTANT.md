@@ -72,8 +72,8 @@ does not bypass the ingestion review boundary.
 }
 ```
 
-`language` is an explicit user preference (`en` or `it`) and overrides model
-language inference. For referential follow-ups such as "Which one is best for
+`language` is an explicit user preference (`en`, `it`, `pt`, `de`, or `bn`) and overrides model
+language inference. The selected language is authoritative for user-visible assistant output. For referential follow-ups such as "Which one is best for
 cinema?", the client may send the previous recommendation IDs in
 `context_place_ids`; controlled retrieval then limits the comparison to those
 records. A new topic is not restricted by stale context IDs.

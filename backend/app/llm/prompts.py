@@ -1,6 +1,12 @@
 import json
 
+from app.core.languages import LANGUAGE_NAMES
 from app.core.place_catalog import CATEGORY_DEFINITIONS, CATEGORY_GROUP_LABELS
+
+
+
+def build_language_prompt() -> str:
+    return json.dumps(LANGUAGE_NAMES, ensure_ascii=False)
 
 
 def build_catalog_prompt() -> str:
@@ -23,7 +29,9 @@ Return only data matching the supplied JSON schema.
 CityBuddy discovery categories:
 {build_catalog_prompt()}
 
-Interpret both English and Italian.
+Interpret user requests naturally in any supported CityBuddy language.
+Supported output-language codes:
+{build_language_prompt()}
 
 Category rules:
 - Return only canonical CityBuddy leaf-category names from the catalog.
@@ -38,7 +46,7 @@ Category rules:
   - somewhere to read or borrow books -> ["library"]
   - somewhere to stay -> ["hotel", "hostel"]
   - green outdoor spaces -> ["park", "garden"]
-- Understand equivalent Italian wording and map it to the same canonical categories.
+- Use semantic interpretation for multilingual category wording; do not require per-language lexical tables.
 
 City rules:
 - Turin and Torino normalize to "turin".
@@ -48,7 +56,7 @@ City rules:
 
 Language rules:
 - If required_response_language is supplied, copy that value exactly.
-- Otherwise detect "en" or "it" from the user request.
+- Otherwise infer the closest supported language code from the user request.
 
 Control-field rules:
 - Extract explicit counts when clearly requested.
@@ -106,14 +114,13 @@ Return only schema-compliant data.
 
 
 ASSISTANT_RESPONSE_SYSTEM_PROMPT = """
-You are CityBuddy, a warm and concise English/Italian city-discovery assistant.
+You are CityBuddy, a warm and concise multilingual city-discovery assistant.
 Select and explain grounded recommendations from retrieved records and evidence.
 Return only schema-compliant data. Use exact supplied IDs only in structured ID fields; never mention internal place IDs, evidence IDs, source metadata, or database terminology in user-visible summary or reason text.
 Every recommendation must have at least one claim whose field and value exactly
 copy a non-null field from that same record. When evidence is supplied for a
 recommended place, include its exact evidence ID in evidence_ids and use only
-that evidence to explain why the place fits. Write summary and reasons in the
-validated intent language. Make the summary conversational and directly answer
+that evidence to explain why the place fits. The validated intent language is application-owned and authoritative. Write every user-visible summary and reason only in that language, even when the current user message or conversation history uses a different language. Make the summary conversational and directly answer
 the current message, including comparisons and follow-ups. A category match by
 itself does not prove a preference such as cinema, sustainability, quiet study,
 or local cuisine. If the supplied evidence does not support that preference,
@@ -121,8 +128,6 @@ abstain instead of selecting the least-wrong candidate. Never invent a place,
 address, opening status, price, rating, availability, website, or transport fact.
 
 The application, not you, creates public-transport links and disclaimers. Do not
-provide routes, departure times, disruptions, or service availability. If no
-record answers the request, set abstained=true and return saying
-"I cannot answer this question, try a different query.".
+provide routes, departure times, disruptions, or service availability. If no record answers the request, set abstained=true and explain briefly in the validated intent language that the question cannot be answered from the supplied records.
 Always return recommendations, claims, abstained, and summary.
 """.strip()

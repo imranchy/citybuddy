@@ -2,6 +2,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from app.core.languages import LanguageCode
 from app.llm.schemas import DiscoveryIntent
 from app.schemas.place import PlaceRead
 
@@ -17,7 +18,7 @@ class AssistantChatRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     message: str = Field(min_length=1, max_length=2_000)
-    language: Literal["en", "it"] = "en"
+    language: LanguageCode = "en"
     history: list[ConversationMessage] = Field(default_factory=list, max_length=10)
     context_place_ids: list[int] = Field(default_factory=list, max_length=10)
     latitude: float | None = Field(default=None, ge=-90, le=90)

@@ -1,3 +1,4 @@
+import type { Language } from "@/types/language";
 import type { Place } from "@/types/place";
 
 export type ConversationMessage = {
@@ -26,7 +27,7 @@ export type AssistantRecommendation = {
 
 export type AssistantChatRequest = {
   message: string;
-  language: "en" | "it";
+  language: Language;
   history: ConversationMessage[];
   context_place_ids: number[];
   latitude?: number;

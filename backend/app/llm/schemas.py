@@ -2,6 +2,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from app.core.languages import LanguageCode
 from app.core.place_catalog import DESTINATION_CATEGORIES
 
 
@@ -63,7 +64,7 @@ class DiscoveryIntent(BaseModel):
     nearby: bool = False
     radius_km: float | None = Field(default=None, ge=0.1, le=20.0)
     wants_transport: bool = False
-    language: Literal["en", "it"] = "en"
+    language: LanguageCode = "en"
     unsupported_constraints: list[
         Literal[
             "live_opening_status",

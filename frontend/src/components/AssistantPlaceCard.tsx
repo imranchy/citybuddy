@@ -2,10 +2,11 @@ import Image from "next/image";
 
 import { getGoogleMapsUrl } from "@/lib/maps";
 import type { AssistantRecommendation } from "@/types/assistant";
+import type { Language } from "@/types/language";
 
 type Props = {
   recommendation: AssistantRecommendation;
-  language: "en" | "it";
+  language: Language;
 };
 
 export default function AssistantPlaceCard({ recommendation, language }: Props) {

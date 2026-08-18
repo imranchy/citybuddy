@@ -8,10 +8,8 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 from app.core.cities import CITIES
-from app.core.maps import (
-    GOOGLE_MAPS_TRANSIT_DISCLAIMER,
-    get_google_maps_transit_url,
-)
+from app.core.languages import fallback_text, language_name
+from app.core.maps import get_google_maps_transit_url
 from app.core.place_catalog import (
     canonicalize_category,
     category_terms,
@@ -74,12 +72,6 @@ CONTEXT_REFERENCE_TERMS = (
     "il primo",
     "il secondo",
     "questo posto",
-)
-
-ITALIAN_TRANSIT_DISCLAIMER = (
-    "Apri Google Maps per indicazioni aggiornate con i mezzi pubblici. Percorsi, "
-    "orari di partenza, interruzioni e disponibilità possono cambiare; verifica "
-    "le informazioni più recenti prima di partire."
 )
 
 COUNT_WORDS = {
@@ -372,6 +364,8 @@ def _grounding_prompt(
             "conversation_history": [item.model_dump() for item in request.history],
             "current_user_message": request.message,
             "validated_intent": intent.model_dump(),
+            "required_response_language": intent.language,
+            "required_response_language_name": language_name(intent.language),
             "retrieved_records": [_record(place) for place in places],
             "retrieved_evidence": [asdict(item) for item in evidence],
         },
@@ -444,8 +438,7 @@ def _fact_reason(
     if preferred.field == "description":
         return str(preferred.value)[:240]
     if preferred.field == "category":
-        prefix = "Categoria" if language == "it" else "Category"
-        return f"{prefix}: {preferred.value}."[:240]
+        return fallback_text(language, "verified_place")[:240]
     label = preferred.field.replace("_", " ").capitalize()
     return f"{label}: {preferred.value}."[:240]
 
@@ -464,29 +457,18 @@ def _sanitize_user_text(text: str) -> str:
 
 
 def _fallback_reason(place: RetrievedPlace, language: str) -> str:
-    if place.place.description:
-        return place.place.description[:240]
-    prefix = "Categoria" if language == "it" else "Category"
-    return f"{prefix}: {place.place.category.replace('_', ' ')}."
+    # Database descriptions are not guaranteed to match the selected UI language.
+    # In model-free fallback mode, prefer a short localized category label rather
+    # than leaking source-language prose into a different selected language.
+    return fallback_text(language, "verified_place")
 
 
 def _answer_text(*, count: int, language: str, fallback: bool) -> str:
-    if language == "it":
-        if count == 1:
-            answer = "Ecco un luogo che potrebbe fare al caso tuo."
-        elif count > 1:
-            answer = f"Ecco {count} luoghi che potrebbero fare al caso tuo."
-        else:
-            answer = "Non ho trovato luoghi adatti alla tua richiesta."
-        return answer
-
     if count == 1:
-        answer = "Here is one place that could be a good match."
-    elif count > 1:
-        answer = f"Here are {count} places that could be a good match."
-    else:
-        answer = "I could not find a suitable place for that request."
-    return answer
+        return fallback_text(language, "one_place")
+    if count > 1:
+        return fallback_text(language, "many_places", count=count)
+    return fallback_text(language, "no_places")
 
 
 class AssistantService:
@@ -576,14 +558,9 @@ class AssistantService:
                     intent_model == self.response_model
                     and self.response_model != self.intent_model
                 ):
-                    warnings.append(
-                        "Il modello di risposta ha recuperato la richiesta dopo un errore "
-                        "del modello di intenti."
-                        if request.language == "it"
-                        else "The intent model failed; the response model recovered the request."
-                    )
+                    warnings.append(fallback_text(request.language, "intent_recovered"))
                 elif attempt:
-                    warnings.append("Intent extraction succeeded after one model retry.")
+                    warnings.append(fallback_text(request.language, "intent_retry"))
                 break
             except Exception as error:
                 last_error = error
@@ -594,11 +571,7 @@ class AssistantService:
                 type(last_error).__name__ if last_error else "unknown",
             )
             provider_available = False
-            warnings.append(
-                "Il modello locale non era disponibile; CityBuddy ha usato filtri verificati."
-                if request.language == "it"
-                else "The local model was unavailable; CityBuddy used verified filters."
-            )
+            warnings.append(fallback_text(request.language, "model_unavailable"))
             fallback_city = _fallback_city(request.message)
             fallback_raw = RawDiscoveryIntent(
                 city=fallback_city,
@@ -609,11 +582,7 @@ class AssistantService:
 
         if intent.city not in CITIES:
             return AssistantChatResponse(
-                answer=(
-                    "Al momento CityBuddy supporta solo Torino."
-                    if request.language == "it"
-                    else "CityBuddy currently supports Torino only."
-                ),
+                answer=fallback_text(request.language, "unsupported_city"),
                 intent=intent,
                 recommendations=[],
                 grounded=True,
@@ -623,11 +592,7 @@ class AssistantService:
 
         if intent.nearby and request.latitude is None:
             return AssistantChatResponse(
-                answer=(
-                    "Condividi la tua posizione per cercare luoghi nelle vicinanze."
-                    if request.language == "it"
-                    else "Share your location to search for nearby places."
-                ),
+                answer=fallback_text(request.language, "location_required"),
                 intent=intent,
                 recommendations=[],
                 grounded=True,
@@ -686,11 +651,7 @@ class AssistantService:
                 logger.warning(
                     "Assistant evidence retrieval failed: %s", type(error).__name__
                 )
-                warnings.append(
-                    "La ricerca semantica non era disponibile; sono stati usati dati verificati."
-                    if request.language == "it"
-                    else "Semantic evidence was unavailable; verified place data was used."
-                )
+                warnings.append(fallback_text(request.language, "semantic_unavailable"))
 
         # Semantic search runs across every eligible indexed place before this
         # controlled candidate shortlist is materialized.
@@ -724,19 +685,9 @@ class AssistantService:
         evidence = [item for item in evidence if item.place_id in retrieved_ids]
 
         if "live_opening_status" in intent.unsupported_constraints:
-            warnings.append(
-                "CityBuddy non può verificare se un luogo è aperto in questo momento; "
-                "controlla le informazioni aggiornate prima della visita."
-                if request.language == "it"
-                else "CityBuddy cannot verify whether a place is open right now; "
-                "check current information before visiting."
-            )
+            warnings.append(fallback_text(request.language, "opening_unavailable"))
         if "unverified_rating" in intent.unsupported_constraints:
-            warnings.append(
-                "CityBuddy non può verificare la valutazione o il premio esterno richiesto."
-                if request.language == "it"
-                else "CityBuddy cannot verify the requested external rating or award."
-            )
+            warnings.append(fallback_text(request.language, "rating_unavailable"))
 
         selected = places[: intent.limit]
         claims_by_place: dict[int, list[GroundedClaim]] = {}
@@ -772,11 +723,10 @@ class AssistantService:
                 )
                 provider_available = False
                 warnings.append(
-                    "Non sono riuscito a verificare una preferenza tra questi luoghi."
-                    if request.language == "it" and contextual_follow_up
-                    else "I could not verify a preference between those places."
-                    if contextual_follow_up
-                    else "CityBuddy used verified filters for these suggestions."
+                    fallback_text(
+                        request.language,
+                        "context_unverified" if contextual_follow_up else "verified_filters",
+                    )
                 )
                 if contextual_follow_up:
                     selected = []
@@ -817,11 +767,7 @@ class AssistantService:
             grounded=True,
             provider_status="available" if provider_available else "fallback",
             transport_disclaimer=(
-                (
-                    ITALIAN_TRANSIT_DISCLAIMER
-                    if request.language == "it"
-                    else GOOGLE_MAPS_TRANSIT_DISCLAIMER
-                )
+                fallback_text(request.language, "transit_disclaimer")
                 if intent.wants_transport
                 else None
             ),

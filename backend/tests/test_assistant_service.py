@@ -769,6 +769,48 @@ class AssistantServiceTests(unittest.TestCase):
             "Una collezione cinematografica verificata.",
         )
 
+    def test_portuguese_selection_overrides_model_language(self) -> None:
+        service = AssistantService(
+            provider=SequenceProvider(
+                [
+                    intent(language="en", limit=1),
+                    grounded(
+                        reason="Uma coleção de cinema verificada.",
+                        summary="Aqui está um museu que pode ser uma boa opção.",
+                    ),
+                ]
+            ),
+            model="fake",
+            retriever=RecordingRetriever([place()]),
+        )
+
+        response = service.respond(
+            object(),
+            AssistantChatRequest(message="Recommend a museum", language="pt"),
+        )
+
+        self.assertEqual(response.intent.language, "pt")
+        self.assertEqual(response.answer, "Aqui está um museu que pode ser uma boa opção.")
+        self.assertEqual(
+            response.recommendations[0].reason,
+            "Uma coleção de cinema verificada.",
+        )
+
+    def test_bangla_fallback_respects_selected_language(self) -> None:
+        service = AssistantService(
+            provider=SequenceProvider([RuntimeError("offline"), RuntimeError("offline")]),
+            model="fake",
+            retriever=RecordingRetriever([]),
+        )
+
+        response = service.respond(
+            object(),
+            AssistantChatRequest(message="Recommend a museum", language="bn"),
+        )
+
+        self.assertEqual(response.intent.language, "bn")
+        self.assertEqual(response.answer, "এই অনুরোধের জন্য উপযুক্ত কোনো জায়গা খুঁজে পাইনি।")
+
     def test_referential_follow_up_is_constrained_to_previous_places(self) -> None:
         retriever = RecordingRetriever([place()])
         service = AssistantService(

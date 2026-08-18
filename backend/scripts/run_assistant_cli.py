@@ -2,6 +2,7 @@ import argparse
 import json
 
 from app.api.routes.assistant import get_assistant_service
+from app.core.languages import SUPPORTED_LANGUAGE_CODES
 from app.db.database import SessionLocal
 from app.schemas.assistant import AssistantChatRequest
 
@@ -11,7 +12,7 @@ def parse_arguments() -> argparse.Namespace:
         description="Run one grounded CityBuddy assistant query without the frontend."
     )
     parser.add_argument("message", help="Natural-language CityBuddy request.")
-    parser.add_argument("--language", choices=("en", "it"), default="en")
+    parser.add_argument("--language", choices=SUPPORTED_LANGUAGE_CODES, default="en")
     parser.add_argument("--latitude", type=float)
     parser.add_argument("--longitude", type=float)
     parser.add_argument("--radius-km", type=float)

@@ -27,13 +27,14 @@ class AssistantRequestSchemaTests(unittest.TestCase):
             )
 
     def test_language_and_context_are_validated(self) -> None:
-        request = AssistantChatRequest(
-            message="Quale preferisci?",
-            language="it",
-            context_place_ids=[10, 10, 11],
-        )
-        self.assertEqual(request.language, "it")
-        self.assertEqual(request.context_place_ids, [10, 11])
+        for language in ("en", "it", "pt", "de", "bn"):
+            request = AssistantChatRequest(
+                message="Quale preferisci?",
+                language=language,
+                context_place_ids=[10, 10, 11],
+            )
+            self.assertEqual(request.language, language)
+            self.assertEqual(request.context_place_ids, [10, 11])
 
         with self.assertRaises(ValidationError):
             AssistantChatRequest(message="Hello", language="fr")

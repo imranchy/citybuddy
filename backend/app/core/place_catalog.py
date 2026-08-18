@@ -143,9 +143,9 @@ def group_categories(categories: Iterable[str]) -> list[dict[str, object]]:
             groups.append({"key": group_key, "label": group_label, "categories": options})
     return groups
 
-# Exact multilingual category aliases used only for deterministic canonicalization.
-# Keep semantic interpretation in the LLM; add new language dictionaries here when
-# CityBuddy expands language support so orchestration code remains unchanged.
+# Legacy exact aliases used only for deterministic compatibility with existing
+# requests. New languages should be interpreted semantically by the intent model;
+# do not add a new per-language category dictionary for every supported language.
 CATEGORY_ALIASES_BY_LANGUAGE: dict[str, dict[str, str]] = {
     "it": {
         "ristorante": "restaurant",

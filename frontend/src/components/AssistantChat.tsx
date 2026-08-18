@@ -5,8 +5,8 @@ import { FormEvent, useEffect, useRef, useState } from "react";
 import AssistantPlaceCard from "@/components/AssistantPlaceCard";
 import { sendAssistantMessage } from "@/lib/api";
 import type { AssistantChatResponse, ConversationMessage } from "@/types/assistant";
+import { LANGUAGE_OPTIONS, type Language } from "@/types/language";
 
-type Language = "en" | "it";
 type SuggestedSearch = { label: string; query: string };
 type AssistantTurn = { id: number; question: string; language: Language; response: AssistantChatResponse };
 type UserLocation = { latitude: number; longitude: number };
@@ -31,22 +31,6 @@ const copy = {
   },
 } as const;
 
-const italianSuggestionLabels: Record<string, string> = {
-  "Near me": "Vicino a me",
-  "Food & drink": "Cibo e bevande",
-  Culture: "Cultura",
-  Outdoors: "All'aperto",
-  "Places of worship": "Luoghi di culto",
-};
-
-const italianSuggestionQueries: Record<string, string> = {
-  "Near me": "Mostrami luoghi interessanti vicino a me",
-  "Food & drink": "Consigliami posti per mangiare e bere",
-  Culture: "Consigliami musei, monumenti e attrazioni culturali",
-  Outdoors: "Consigliami parchi, giardini e punti panoramici",
-  "Places of worship": "Mostrami luoghi di culto a Torino",
-};
-
 function history(turns: AssistantTurn[]): ConversationMessage[] {
   return turns.flatMap((turn) => [
     { role: "user" as const, content: turn.question },
@@ -65,7 +49,9 @@ export default function AssistantChat({ suggestions, isApiConnected }: Props) {
   const nextId = useRef(1);
   const controller = useRef<AbortController | null>(null);
   const transcript = useRef<HTMLDivElement | null>(null);
-  const t = copy[language];
+  // The selector controls assistant output language. UI chrome stays on the
+  // existing English/Italian localization until broader UI localization is added.
+  const t = copy[language === "it" ? "it" : "en"];
 
   useEffect(() => () => controller.current?.abort(), []);
   useEffect(() => {
@@ -118,7 +104,7 @@ export default function AssistantChat({ suggestions, isApiConnected }: Props) {
         <button disabled={isSending || !isApiConnected} className="rounded-xl bg-[#FF6846] px-5 font-semibold text-[#070B24] disabled:opacity-50">{isSending ? t.thinking : t.send}</button>
       </div>
       <div className="mt-2 flex flex-wrap items-center gap-2">
-        <select aria-label="Language" value={language} onChange={(event) => setLanguage(event.target.value as Language)} className="rounded-full border border-white/10 bg-[#0B112B] px-3 py-2 text-xs text-[#FFF8E7]"><option value="en">English</option><option value="it">Italiano</option></select>
+        <select aria-label="Language" value={language} onChange={(event) => setLanguage(event.target.value as Language)} className="rounded-full border border-white/10 bg-[#0B112B] px-3 py-2 text-xs text-[#FFF8E7]">{LANGUAGE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select>
         <button type="button" onClick={locate} disabled={isLocating} className="rounded-full border border-[#FFC83D]/30 px-3 py-2 text-xs text-[#FFC83D]">{isLocating ? t.locating : location ? t.ready : t.locate}</button>
         {location && <button type="button" onClick={() => setLocation(null)} className="rounded-full border border-white/10 px-3 py-2 text-xs text-[#A9B1D6]">{t.remove}</button>}
         {turns.length > 0 && <button type="button" onClick={() => { setTurns([]); setQuery(""); setMessage(""); }} className="ml-auto rounded-full border border-white/10 px-3 py-2 text-xs text-[#A9B1D6]">{t.reset}</button>}
@@ -131,7 +117,7 @@ export default function AssistantChat({ suggestions, isApiConnected }: Props) {
       <section aria-label="CityBuddy conversation" className="overflow-hidden rounded-3xl border border-white/10 bg-[#121936] shadow-2xl">
         {turns.length === 0 ? (
           <div className="p-3">
-            <div className="flex gap-2 overflow-x-auto px-2 pb-3">{suggestions.map((item) => <button key={item.label} type="button" onClick={() => setQuery(language === "it" ? (italianSuggestionQueries[item.label] ?? item.query) : item.query)} className="shrink-0 rounded-full border border-white/10 px-3 py-2 text-xs text-[#A9B1D6] hover:text-[#FFF8E7]">{language === "it" ? (italianSuggestionLabels[item.label] ?? item.label) : item.label}</button>)}</div>
+            <div className="flex gap-2 overflow-x-auto px-2 pb-3">{suggestions.map((item) => <button key={item.label} type="button" onClick={() => setQuery(item.query)} className="shrink-0 rounded-full border border-white/10 px-3 py-2 text-xs text-[#A9B1D6] hover:text-[#FFF8E7]">{item.label}</button>)}</div>
             {composer}
           </div>
         ) : (
