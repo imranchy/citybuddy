@@ -8,6 +8,8 @@ from app.schemas.place import PlaceRead
 from app.services.official_site import OfficialPageType, OfficialSiteEvidence
 from app.tools.citybuddy import PlaceSearchInput, PlaceSearchResult, get_place, search_places
 from app.tools.official_site import get_official_place_page as retrieve_official_place_page
+from app.services.weather import WeatherForecast
+from app.tools.weather import WeatherRequest, get_weather as retrieve_weather
 
 
 mcp = MCPServer(
@@ -15,7 +17,8 @@ mcp = MCPServer(
     instructions=(
         "Use only these bounded CityBuddy tools for reviewed place data and controlled "
         "official-site evidence. This server does not expose arbitrary SQL, caller-supplied "
-        "URLs, shell commands, filesystem access, generic web search, or production writes."
+        "URLs, shell commands, filesystem access, generic web search, or production writes. "
+        "Weather access uses a fixed provider endpoint with bounded city/coordinate inputs."
     ),
 )
 
@@ -66,6 +69,24 @@ def get_official_place_page(
             place_id=place_id,
             page_type=page_type,
         )
+
+
+@mcp.tool()
+def get_weather(
+    city: Annotated[str, Field(min_length=1, max_length=100)],
+    forecast_hours: Annotated[int, Field(ge=1, le=48)] = 12,
+    latitude: Annotated[float | None, Field(ge=-90, le=90)] = None,
+    longitude: Annotated[float | None, Field(ge=-180, le=180)] = None,
+) -> WeatherForecast:
+    """Get timestamped current weather and a bounded forecast for a supported city."""
+
+    request = WeatherRequest(
+        city=city,
+        forecast_hours=forecast_hours,
+        latitude=latitude,
+        longitude=longitude,
+    )
+    return retrieve_weather(request)
 
 
 def main() -> None:

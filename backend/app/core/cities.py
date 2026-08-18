@@ -9,6 +9,7 @@ class CityConfig:
     display_name: str
     country_code: str
     bounding_box: tuple[float, float, float, float]
+    center: tuple[float, float]
     default_language: str
     supported_languages: tuple[str, ...]
     timezone: str
@@ -25,6 +26,7 @@ CITIES: dict[str, CityConfig] = {
         country_code="IT",
         # South, west, north and east boundaries covering Turin.
         bounding_box=(44.9580, 7.5770, 45.1330, 7.7730),
+        center=(45.0703, 7.6869),
         default_language="it",
         supported_languages=("it", "en"),
         timezone="Europe/Rome",
