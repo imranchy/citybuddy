@@ -305,3 +305,77 @@ Recommended pipeline: fetch to staging, validate, agent-assisted review, human
 approval, allowlisted promotion, audit report. Start with daily collection and
 manual promotion; automate promotion only after quality thresholds and rollback
 procedures have been proven in production.
+
+## Milestone C bounded ingestion agents
+
+CityBuddy now has three bounded operational roles built on the existing staging
+control plane rather than a parallel ingestion system:
+
+1. **Discovery role** — `collect_osm_staging`, `collect_wikimedia_staging`, and
+   `run_city_collection` collect approved sources into staging only. Wikimedia
+   collection continues to revisit production places that lack Commons images.
+2. **Review / enrichment role** — `review_staged_candidates` runs deterministic
+   validation first. Only `review_required` candidates call Qwen; Qwen may
+   escalate genuine ambiguity once to Gemma. The result is an advisory
+   `agent_review_decisions` record and never a production write authorization.
+3. **Indexing role** — `index_place_evidence` keeps the existing fingerprinted,
+   incremental bge-m3 path and therefore embeds only new or changed reviewed
+   production evidence.
+
+Apply the latest migration before persisting agent review decisions:
+
+```cmd
+alembic upgrade head
+```
+
+Preview bounded review for one staging run. Start with a small real-data smoke
+batch before reviewing a large run:
+
+```cmd
+python -m scripts.review_staged_candidates --run-id 12 --limit 10
+```
+
+Offline ingestion review uses a minimum 90-second Ollama timeout by default,
+without changing the latency-oriented assistant timeout. Override it only for a
+specific review run with `--timeout-seconds`. Each candidate is attempted twice
+by default; a repeated local-model failure is reported as `model_error_pending`
+and the runner continues to the next candidate instead of aborting the batch.
+
+Persist review metadata only (still no production promotion):
+
+```cmd
+python -m scripts.review_staged_candidates --run-id 12 --apply
+```
+
+Applied decisions are committed incrementally. Re-running the command skips an
+already-persisted decision for the same staged candidate fingerprint, so an
+interrupted review batch can resume without repeating successful model work.
+
+By default deterministically valid rows are skipped to avoid unnecessary model
+work. Add `--include-valid` if an audit run should persist those deterministic
+approval decisions too. Deterministically invalid rows never call an LLM and are
+always rejected by the review graph.
+
+The graph has a hard Qwen -> optional Gemma escalation bound. A second
+`escalate` decision terminates conservatively as a rejection for later human
+review, so agent loops cannot become unbounded.
+
+Agent decisions are deliberately separate from promotion. Existing
+`promote_staged_places` and `promote_staged_images` commands remain the only
+production publication boundary and retain their validation/explicit-approval
+requirements.
+
+Report current primary-image coverage at any time:
+
+```cmd
+python -m scripts.report_image_coverage --city turin
+```
+
+Include one image staging run's validation/promotion counts:
+
+```cmd
+python -m scripts.report_image_coverage --city turin --run-id 13
+```
+
+This provides the Milestone C coverage baseline without exposing image license
+or provenance metadata in the user-facing assistant UI.

@@ -2,6 +2,7 @@ import unittest
 
 from app.core.ingestion import (
     build_candidate_fingerprint,
+    missing_enrichment_updates,
     validate_image_candidate,
     validate_place_candidate,
     validation_status,
@@ -124,6 +125,39 @@ class IngestionValidationTests(unittest.TestCase):
 
         self.assertIn("invalid_wikidata_id", codes)
         self.assertIn("invalid_source_image_id", codes)
+
+
+    def test_enrichment_only_fills_missing_production_fields(self) -> None:
+        current = {
+            "description": None,
+            "opening_hours": "Mo-Fr 09:00-17:00",
+            "website": "",
+            "operator": "Existing operator",
+        }
+        candidate = {
+            "description": "A reviewed museum description.",
+            "opening_hours": "24/7",
+            "website": "https://example.org",
+            "operator": "Different operator",
+        }
+
+        updates = missing_enrichment_updates(current, candidate)
+
+        self.assertEqual(
+            updates,
+            {
+                "description": "A reviewed museum description.",
+                "website": "https://example.org",
+            },
+        )
+
+    def test_enrichment_ignores_empty_source_values(self) -> None:
+        updates = missing_enrichment_updates(
+            {"description": None, "website": None},
+            {"description": "", "website": None},
+        )
+
+        self.assertEqual(updates, {})
 
     def test_fingerprint_is_stable_across_key_order(self) -> None:
         first = {"source_id": "node/123", "name": "Museum"}

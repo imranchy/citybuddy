@@ -4,7 +4,7 @@ from collections import Counter
 from sqlalchemy import select
 
 from app.db.database import SessionLocal
-from app.models.ingestion import StagedPlace
+from app.models.ingestion import AgentReviewDecision, StagedPlace
 from app.services.ingestion import promote_staged_places
 
 
@@ -57,17 +57,30 @@ def main() -> None:
         if arguments.run_id is not None:
             if not arguments.all_eligible:
                 raise SystemExit("--run-id requires explicit --all-eligible approval.")
-            statuses = ["valid"]
+            base_query = select(StagedPlace).where(
+                StagedPlace.ingestion_run_id == arguments.run_id,
+                StagedPlace.promotion_status == "pending",
+            )
             if arguments.approve_warnings:
-                statuses.append("review_required")
-            places = database.scalars(
-                select(StagedPlace)
-                .where(
-                    StagedPlace.ingestion_run_id == arguments.run_id,
-                    StagedPlace.validation_status.in_(statuses),
-                    StagedPlace.promotion_status == "pending",
+                approved_review_ids = select(AgentReviewDecision.staged_place_id).where(
+                    AgentReviewDecision.ingestion_run_id == arguments.run_id,
+                    AgentReviewDecision.candidate_type == "place",
+                    AgentReviewDecision.verdict == "approve",
+                    AgentReviewDecision.candidate_fingerprint == StagedPlace.fingerprint,
                 )
-                .order_by(StagedPlace.category, StagedPlace.name, StagedPlace.id)
+                base_query = base_query.where(
+                    (StagedPlace.validation_status == "valid")
+                    | (
+                        (StagedPlace.validation_status == "review_required")
+                        & StagedPlace.id.in_(approved_review_ids)
+                    )
+                )
+            else:
+                base_query = base_query.where(StagedPlace.validation_status == "valid")
+            places = database.scalars(
+                base_query.order_by(
+                    StagedPlace.category, StagedPlace.name, StagedPlace.id
+                )
             ).all()
             if not places:
                 raise SystemExit("No eligible pending places found for that run.")

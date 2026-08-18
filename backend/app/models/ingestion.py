@@ -67,6 +67,10 @@ class StagedPlace(Base):
             name="uq_staged_places_run_source",
         ),
         CheckConstraint(
+            "candidate_kind IN ('new', 'enrichment')",
+            name="ck_staged_places_candidate_kind",
+        ),
+        CheckConstraint(
             "validation_status IN ('valid', 'review_required', 'invalid')",
             name="ck_staged_places_validation_status",
         ),
@@ -81,6 +85,12 @@ class StagedPlace(Base):
         ForeignKey("ingestion_runs.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
+    )
+    candidate_kind: Mapped[str] = mapped_column(
+        String(20), nullable=False, server_default=text("'new'")
+    )
+    target_place_id: Mapped[int | None] = mapped_column(
+        ForeignKey("places.id", ondelete="CASCADE"), nullable=True, index=True
     )
     source: Mapped[str] = mapped_column(String(30), nullable=False)
     source_id: Mapped[str] = mapped_column(String(100), nullable=False)
@@ -273,4 +283,52 @@ class ImagePromotionBatch(Base):
     )
     completed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
+    )
+
+
+class AgentReviewDecision(Base):
+    __tablename__ = "agent_review_decisions"
+    __table_args__ = (
+        CheckConstraint(
+            "candidate_type IN ('place', 'image')",
+            name="ck_agent_review_candidate_type",
+        ),
+        CheckConstraint(
+            "verdict IN ('approve', 'reject')",
+            name="ck_agent_review_verdict",
+        ),
+        CheckConstraint(
+            "(candidate_type = 'place' AND staged_place_id IS NOT NULL AND staged_image_id IS NULL) "
+            "OR (candidate_type = 'image' AND staged_image_id IS NOT NULL AND staged_place_id IS NULL)",
+            name="ck_agent_review_candidate_reference",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    ingestion_run_id: Mapped[int] = mapped_column(
+        ForeignKey("ingestion_runs.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    candidate_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    staged_place_id: Mapped[int | None] = mapped_column(
+        ForeignKey("staged_places.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    staged_image_id: Mapped[int | None] = mapped_column(
+        ForeignKey("staged_place_images.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    candidate_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    validation_status: Mapped[str] = mapped_column(String(20), nullable=False)
+    verdict: Mapped[str] = mapped_column(String(20), nullable=False)
+    confidence: Mapped[float] = mapped_column(Float, nullable=False)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    concerns: Mapped[list[str]] = mapped_column(
+        ARRAY(String(120)), nullable=False, default=list, server_default=text("'{}'::varchar[]")
+    )
+    reviewer_model: Mapped[str] = mapped_column(String(120), nullable=False)
+    escalated: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=false()
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
     )

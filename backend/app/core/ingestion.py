@@ -13,6 +13,34 @@ ALLOWED_INGESTION_SOURCES = frozenset({"osm", "wikimedia_commons"})
 ALLOWED_TRIGGERS = frozenset({"manual", "scheduled"})
 
 
+SAFE_ENRICHMENT_FIELDS = ("description", "opening_hours", "website", "operator")
+
+
+def missing_enrichment_updates(
+    current: Mapping[str, Any],
+    candidate: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Return source values that may safely fill currently missing production fields.
+
+    This never proposes overwriting a populated production value. Conflict
+    reconciliation remains a separate reviewed future capability.
+    """
+
+    updates: dict[str, Any] = {}
+    for field in SAFE_ENRICHMENT_FIELDS:
+        existing_value = current.get(field)
+        candidate_value = candidate.get(field)
+        existing_missing = existing_value is None or (
+            isinstance(existing_value, str) and not existing_value.strip()
+        )
+        candidate_present = candidate_value is not None and not (
+            isinstance(candidate_value, str) and not candidate_value.strip()
+        )
+        if existing_missing and candidate_present:
+            updates[field] = candidate_value
+    return updates
+
+
 @dataclass(frozen=True, slots=True)
 class ValidationFinding:
     code: str

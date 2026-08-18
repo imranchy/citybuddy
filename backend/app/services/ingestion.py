@@ -8,12 +8,14 @@ from sqlalchemy.orm import Session
 
 from app.core.ingestion import (
     build_candidate_fingerprint,
+    missing_enrichment_updates,
     ValidationFinding,
     validate_image_candidate,
     validate_place_candidate,
     validation_status,
 )
 from app.models.ingestion import (
+    AgentReviewDecision,
     ImagePromotionBatch,
     ImageValidationIssue,
     IngestionRun,
@@ -54,7 +56,15 @@ def stage_place_candidates(
     run: IngestionRun,
     candidates: Iterable[Mapping[str, Any]],
 ) -> dict[str, int]:
-    counts = {"fetched": 0, "valid": 0, "review_required": 0, "invalid": 0}
+    counts = {
+        "fetched": 0,
+        "new": 0,
+        "enrichment": 0,
+        "unchanged_existing": 0,
+        "valid": 0,
+        "review_required": 0,
+        "invalid": 0,
+    }
 
     candidate_list = [dict(item) for item in candidates]
     name_counts: dict[tuple[str, str], int] = {}
@@ -67,7 +77,39 @@ def stage_place_candidates(
 
     for candidate in candidate_list:
         counts["fetched"] += 1
+        existing_place = database.scalar(
+            select(Place).where(
+                Place.source == str(candidate.get("source") or ""),
+                Place.source_id == str(candidate.get("source_id") or ""),
+            )
+        )
+        candidate_kind = "new"
+        target_place_id = None
+        if existing_place is not None:
+            current_values = {
+                field: getattr(existing_place, field)
+                for field in ("description", "opening_hours", "website", "operator")
+            }
+            updates = missing_enrichment_updates(current_values, candidate)
+            if not updates:
+                counts["unchanged_existing"] += 1
+                continue
+            candidate_kind = "enrichment"
+            target_place_id = existing_place.id
+            counts["enrichment"] += 1
+        else:
+            counts["new"] += 1
+
         findings = validate_place_candidate(candidate)
+        if candidate_kind == "enrichment":
+            findings.append(
+                ValidationFinding(
+                    "existing_record_enrichment",
+                    "warning",
+                    "This candidate proposes filling missing metadata on an existing production place.",
+                    None,
+                )
+            )
         key = (
             str(candidate.get("category") or ""),
             str(candidate.get("name") or "").strip().casefold(),
@@ -110,6 +152,8 @@ def stage_place_candidates(
         longitude = candidate.get("longitude")
         staged_place = StagedPlace(
             ingestion_run_id=run.id,
+            candidate_kind=candidate_kind,
+            target_place_id=target_place_id,
             source=str(candidate.get("source") or "unknown"),
             source_id=str(candidate.get("source_id") or "missing"),
             name=candidate.get("name") or "",
@@ -254,13 +298,28 @@ def promote_staged_places(
             raise ValueError(
                 f"Staged place {staged_place.id} failed validation."
             )
-        if (
-            staged_place.validation_status == "review_required"
-            and not approve_warnings
-        ):
-            raise ValueError(
-                f"Staged place {staged_place.id} requires explicit warning approval."
+        if staged_place.validation_status == "review_required":
+            if not approve_warnings:
+                raise ValueError(
+                    f"Staged place {staged_place.id} requires explicit warning approval."
+                )
+            decision = database.scalar(
+                select(AgentReviewDecision)
+                .where(
+                    AgentReviewDecision.ingestion_run_id
+                    == staged_place.ingestion_run_id,
+                    AgentReviewDecision.candidate_type == "place",
+                    AgentReviewDecision.staged_place_id == staged_place.id,
+                    AgentReviewDecision.candidate_fingerprint
+                    == staged_place.fingerprint,
+                )
+                .order_by(AgentReviewDecision.id.desc())
+                .limit(1)
             )
+            if decision is None or decision.verdict != "approve":
+                raise ValueError(
+                    f"Staged place {staged_place.id} requires a persisted approve review decision."
+                )
 
     batch = PromotionBatch(
         ingestion_run_id=run_ids.pop(),
@@ -294,6 +353,35 @@ def promote_staged_places(
                     Place.source_id == staged_place.source_id,
                 )
             )
+            if staged_place.candidate_kind == "enrichment":
+                target = database.get(Place, staged_place.target_place_id)
+                if target is None or existing_place is None or target.id != existing_place.id:
+                    raise ValueError(
+                        f"Staged enrichment {staged_place.id} no longer matches its production target."
+                    )
+                current_values = {
+                    field: getattr(target, field)
+                    for field in ("description", "opening_hours", "website", "operator")
+                }
+                candidate_values = {
+                    "description": staged_place.description,
+                    "opening_hours": staged_place.opening_hours,
+                    "website": staged_place.website,
+                    "operator": staged_place.operator,
+                }
+                updates = missing_enrichment_updates(current_values, candidate_values)
+                if not updates:
+                    staged_place.promotion_status = "skipped"
+                    staged_place.promoted_place_id = target.id
+                    batch.skipped_count += 1
+                    continue
+                for field, value in updates.items():
+                    setattr(target, field, value)
+                staged_place.promotion_status = "promoted"
+                staged_place.promoted_place_id = target.id
+                batch.promoted_count += 1
+                continue
+
             if existing_place is not None:
                 staged_place.promotion_status = "skipped"
                 staged_place.promoted_place_id = existing_place.id
