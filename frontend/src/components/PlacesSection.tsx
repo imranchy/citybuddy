@@ -53,7 +53,7 @@ export default function PlacesSection() {
         <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.25em] text-[#FFC83D]">
-              Live database
+              Explore places
             </p>
 
             <h2

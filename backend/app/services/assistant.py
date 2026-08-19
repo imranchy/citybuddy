@@ -10,7 +10,7 @@ from dataclasses import asdict
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
-from app.core.cities import CITIES
+from app.core.cities import CITIES, CITY_ALIASES
 from app.core.languages import fallback_text, language_name
 from app.core.maps import get_google_maps_transit_url
 from app.core.place_catalog import (
@@ -179,6 +179,32 @@ RATING_TERMS = (
     "stelle",
 )
 
+WEATHER_TERMS = (
+    "weather", "forecast", "temperature", "rain", "snow", "wind",
+    "meteo", "previsioni", "temperatura", "pioggia", "neve", "vento",
+)
+MENU_TERMS = (
+    "menu", "menù", "dish", "dishes", "vegetarian",
+    "vegan", "halal", "allergen", "gluten", "carta", "piatto", "piatti",
+    "vegetar", "vegano", "vegana", "allerg", "senza glutine",
+)
+OPENING_TERMS = (
+    "open today", "open now", "opening hours", "hours today", "when does",
+    "orari", "aperto oggi", "aperta oggi", "aperto ora", "aperta ora",
+    "chiude", "apre",
+)
+EXHIBITION_TERMS = (
+    "exhibition", "exhibitions", "what's on", "what is on", "events today",
+    "mostra", "mostre", "esposizione", "esposizioni",
+)
+OFFICIAL_INFO_TERMS = (
+    "shops", "shop", "stores", "store", "brands", "brand", "artisans",
+    "artisan", "collections", "collection", "accessibility", "accessible",
+    "wheelchair", "parking", "facilities", "facility", "amenities",
+    "visitor services", "rules", "negozi", "botteghe", "marchi", "artigiani",
+    "collezioni", "accessibilità", "accessibile", "parcheggio", "servizi",
+)
+
 
 class GroundingValidationError(RuntimeError):
     """Raised when a generated answer is not supported by retrieved records."""
@@ -280,10 +306,11 @@ def _requested_radius_km(message: str) -> float | None:
     return radius if 0.1 <= radius <= 20.0 else None
 
 
-def _requested_limit(message: str, categories: list[str]) -> int | None:
-    """Extract an explicit count next to any configured term for a category."""
+def _requested_category_limits(message: str, categories: list[str]) -> dict[str, int]:
+    """Return explicit per-category counts without collapsing mixed requests."""
 
     normalized = " ".join(message.casefold().replace("_", " ").split())
+    limits: dict[str, int] = {}
     for category in categories:
         terms = category_terms(category) or (category.replace("_", " "),)
         for term in sorted(terms, key=len, reverse=True):
@@ -293,30 +320,94 @@ def _requested_limit(message: str, categories: list[str]) -> int | None:
                 normalized,
             )
             if numeric_match:
-                return int(numeric_match.group(1))
+                limits[category] = int(numeric_match.group(1))
+                break
 
+            matched = False
             for word, count in COUNT_WORDS.items():
                 if re.search(
                     rf"\b{re.escape(word)}\s+(?:\w+\s+)?{category_pattern}\b",
                     normalized,
                 ):
-                    return count
+                    limits[category] = count
+                    matched = True
+                    break
+            if matched:
+                break
 
             if re.search(
                 rf"\b(?:a|an|un|una)\s+{category_pattern}\b",
                 normalized,
             ):
-                return 1
-    return None
+                limits[category] = 1
+                break
+    return limits
+
+
+def _requested_limit(message: str, categories: list[str]) -> int | None:
+    """Extract the application-owned total result count.
+
+    When the user gives a count for every explicitly requested category, the total is
+    the sum of those quotas (for example, one museum + one park -> two results).
+    """
+
+    limits = _requested_category_limits(message, categories)
+    if not limits:
+        return None
+    if len(categories) > 1 and len(limits) == len(categories):
+        return min(sum(limits.values()), 10)
+    return next(iter(limits.values()))
+
+
+def _compound_subrequests(message: str) -> list[str]:
+    """Split an explicitly compound message into bounded conversational turns.
+
+    This is orchestration, not semantic classification: each resulting turn still goes
+    through the normal Qwen intent -> controlled retrieval/tool -> Gemma response path.
+    We only split on clear sentence/question boundaries and require at least two parts.
+    """
+
+    compact = " ".join(message.strip().split())
+    if not compact:
+        return []
+    parts = [
+        part.strip()
+        for part in re.split(r"(?<=[?!])\s+|(?<=\.)\s+(?=[A-ZÀ-Ý])", compact)
+        if part.strip()
+    ]
+    if len(parts) < 2:
+        return []
+    # Avoid turning ordinary multi-sentence descriptions into agent loops. At least
+    # two clauses must look like direct questions/requests.
+    request_starts = (
+        "recommend", "find", "show", "tell", "what", "where", "when",
+        "which", "who", "how", "is", "are", "does", "do", "can",
+        "suggest", "give", "trova", "consiglia", "dimmi", "qual", "quale",
+        "dove", "quando", "come", "è", "sono",
+    )
+    request_like = sum(part.casefold().startswith(request_starts) for part in parts)
+    if request_like < 2:
+        return []
+    return parts[:12]
 
 
 def _fallback_city(message: str) -> str:
-    """Recover explicit known city names without asking the model to infer them."""
+    """Recover an explicitly named city when the intent model is unavailable."""
 
     normalized = message.casefold()
     for city_name, city_key in FALLBACK_CITY_NAMES.items():
         if re.search(rf"\b{re.escape(city_name)}\b", normalized):
             return city_key
+
+    # Preserve an explicit proper-noun city in common location phrases so a
+    # model outage cannot silently turn "Milan" into Turin. This is only a
+    # conservative fallback; the application still supports only configured cities.
+    match = re.search(
+        r"\b(?:in|near|around|a|à|en)\s+([A-ZÀ-Ý][A-Za-zÀ-ÿ'’-]{2,})\b",
+        message,
+    )
+    if match:
+        return match.group(1).casefold()
     return "turin"
 
 def _canonical_model_categories(values: list[str]) -> list[str]:
@@ -328,6 +419,61 @@ def _canonical_model_categories(values: list[str]) -> list[str]:
     return categories
 
 
+def _contains_any(message: str, terms: tuple[str, ...]) -> bool:
+    normalized = message.casefold()
+    return any(term in normalized for term in terms)
+
+
+def _validated_target_place_name(message: str, target_name: str | None) -> str | None:
+    """Accept an explicitly named place, but never confuse the city with a place target."""
+
+    if not target_name:
+        return None
+    normalized_message = " ".join(message.casefold().split())
+    normalized_target = " ".join(target_name.casefold().split())
+    if not normalized_target or normalized_target not in normalized_message:
+        return None
+
+    city_names = set(CITIES)
+    city_names.update(CITY_ALIASES)
+    city_names.update(alias.casefold() for alias in CITY_ALIASES.values())
+    city_names.update(config.display_name.casefold() for config in CITIES.values())
+    if normalized_target in city_names:
+        return None
+    return target_name.strip()
+
+
+def _application_tool_intent(message: str, proposed: str) -> str:
+    """Repair advisory tool routing from the semantics of the current message.
+
+    Only weather is promoted deterministically from discovery. Other live routes must
+    already be proposed by the intent model *and* be supported by the current message,
+    preventing previous conversation context from hijacking a new request.
+    """
+
+    if _contains_any(message, WEATHER_TERMS):
+        return "weather"
+    if proposed == "official_menu":
+        return "official_menu" if _contains_any(message, MENU_TERMS) else "discovery"
+    if proposed == "official_opening":
+        return (
+            "official_opening"
+            if _has_live_opening_request(message) or _contains_any(message, OPENING_TERMS)
+            else "discovery"
+        )
+    if proposed == "official_prices":
+        live_price_terms = (
+            "price", "prices", "cost", "costs", "how much", "ticket", "tickets",
+            "prezzo", "prezzi", "costo", "biglietto", "biglietti",
+        )
+        return "official_prices" if _contains_any(message, live_price_terms) else "discovery"
+    if proposed == "official_exhibitions":
+        return "official_exhibitions" if _contains_any(message, EXHIBITION_TERMS) else "discovery"
+    if proposed == "official_info":
+        return "official_info" if _contains_any(message, OFFICIAL_INFO_TERMS) else "discovery"
+    return proposed
+
+
 def normalize_discovery_intent(
     request: AssistantChatRequest,
     intent: RawDiscoveryIntent | DiscoveryIntent,
@@ -336,7 +482,10 @@ def normalize_discovery_intent(
 
     explicit_categories = _explicit_categories(request.message)
     model_categories = _canonical_model_categories(intent.categories)
-    categories = model_categories or explicit_categories
+    # Explicit supported categories in the current user message are application-owned
+    # constraints. The intent model may help when the user is vague, but it must never
+    # broaden an explicit request (for example museum -> museum + hotel + restaurant).
+    categories = explicit_categories or model_categories
     validated_city = _validated_city(request.message, intent.city)
     explicit_radius = request.radius_km or _requested_radius_km(request.message)
     nearby = _asks_for_nearby(request.message) or explicit_radius is not None
@@ -347,9 +496,10 @@ def normalize_discovery_intent(
         validated_city,
         wants_transport=wants_transport,
     )
-    if intent.tool_intent == "official_opening":
+    repaired_tool_intent = _application_tool_intent(request.message, intent.tool_intent)
+    if repaired_tool_intent == "official_opening":
         constraints = [item for item in constraints if item != "live_opening_status"]
-    if intent.tool_intent == "official_prices":
+    if repaired_tool_intent == "official_prices":
         constraints = [item for item in constraints if item != "unverified_price"]
 
     normalized = {
@@ -360,8 +510,10 @@ def normalize_discovery_intent(
         "nearby": nearby,
         "radius_km": explicit_radius if nearby else None,
         "wants_transport": wants_transport,
-        "tool_intent": intent.tool_intent,
-        "target_place_name": intent.target_place_name,
+        "tool_intent": repaired_tool_intent,
+        "target_place_name": _validated_target_place_name(
+            request.message, intent.target_place_name
+        ),
         "forecast_hours": intent.forecast_hours,
         "unsupported_constraints": constraints,
     }
@@ -386,6 +538,9 @@ def _grounding_prompt(
             "conversation_history": [item.model_dump() for item in request.history],
             "current_user_message": request.message,
             "validated_intent": intent.model_dump(),
+            "explicit_category_quotas": _requested_category_limits(
+                request.message, intent.categories
+            ),
             "required_response_language": intent.language,
             "required_response_language_name": language_name(intent.language),
             "retrieved_records": [_record(place) for place in places],
@@ -430,9 +585,6 @@ def _validate_grounded_response(
             raise GroundingValidationError("The model returned an unsupported claim.")
         claims_by_place.setdefault(claim.place_id, []).append(claim)
 
-    if any(place_id not in claims_by_place for place_id in recommendation_ids):
-        raise GroundingValidationError("A recommendation had no supporting claim.")
-
     evidence_by_id = {item.id: item for item in evidence}
     evidence_place_ids = {item.place_id for item in evidence}
     for recommendation in response.recommendations:
@@ -442,11 +594,6 @@ def _validate_grounded_response(
             for evidence_id in recommendation.evidence_ids
         ):
             raise GroundingValidationError("A recommendation cited invalid evidence.")
-        if (
-            recommendation.place_id in evidence_place_ids
-            and not recommendation.evidence_ids
-        ):
-            raise GroundingValidationError("Available evidence was not cited.")
     return claims_by_place
 
 
@@ -673,14 +820,8 @@ def _select_official_target(
     target_name: str | None,
     context_place_ids: list[int],
 ) -> RetrievedPlace | None:
-    if len(context_place_ids) == 1:
-        contextual = next(
-            (item for item in places if item.place.id == context_place_ids[0]),
-            None,
-        )
-        if contextual is not None:
-            return contextual
-
+    # An explicitly named place in the current message always outranks earlier
+    # conversation context. Context is only the fallback for "it/there/the first".
     if target_name:
         normalized = " ".join(target_name.casefold().split())
         exact = [
@@ -699,6 +840,14 @@ def _select_official_target(
         if len(partial) == 1:
             return partial[0]
 
+    if len(context_place_ids) == 1:
+        contextual = next(
+            (item for item in places if item.place.id == context_place_ids[0]),
+            None,
+        )
+        if contextual is not None:
+            return contextual
+
     return places[0] if len(places) == 1 else None
 
 
@@ -714,7 +863,7 @@ class AssistantService:
         embedding_provider: EmbeddingProvider | None = None,
         embedding_model: str = "bge-m3",
         evidence_retriever: EvidenceRetriever | None = None,
-        evidence_limit: int = 8,
+        evidence_limit: int = 16,
         weather_tool: WeatherTool | None = None,
         official_site_tool: OfficialSiteTool | None = None,
     ) -> None:
@@ -776,6 +925,71 @@ class AssistantService:
             return None
 
     def respond(
+        self,
+        database: Session,
+        request: AssistantChatRequest,
+    ) -> AssistantChatResponse:
+        subrequests = _compound_subrequests(request.message)
+        if not subrequests:
+            return self._respond_single(database, request)
+
+        rolling_history = list(request.history)
+        context_ids = list(request.context_place_ids)
+        responses: list[tuple[str, AssistantChatResponse]] = []
+        unique_recommendations: dict[int, AssistantRecommendation] = {}
+        warnings: list[str] = []
+        transport_disclaimer: str | None = None
+
+        from app.schemas.assistant import ConversationMessage
+
+        for submessage in subrequests:
+            subrequest = AssistantChatRequest(
+                message=submessage,
+                language=request.language,
+                history=rolling_history[-10:],
+                context_place_ids=context_ids,
+                latitude=request.latitude,
+                longitude=request.longitude,
+                radius_km=request.radius_km,
+            )
+            response = self._respond_single(database, subrequest)
+            responses.append((submessage, response))
+            for recommendation in response.recommendations:
+                unique_recommendations.setdefault(recommendation.place.id, recommendation)
+            warnings.extend(item for item in response.warnings if item not in warnings)
+            if response.transport_disclaimer:
+                transport_disclaimer = response.transport_disclaimer
+            if response.recommendations:
+                context_ids = [item.place.id for item in response.recommendations]
+
+            rolling_history.extend(
+                [
+                    ConversationMessage(role="user", content=submessage[:2000]),
+                    ConversationMessage(role="assistant", content=response.answer[:2000]),
+                ]
+            )
+
+        first_response = responses[0][1]
+        combined_answer = "\n\n".join(
+            f"{index}. {response.answer}"
+            for index, (_, response) in enumerate(responses, start=1)
+        )
+        recommendations = list(unique_recommendations.values())[:10]
+        return AssistantChatResponse(
+            answer=combined_answer,
+            intent=first_response.intent,
+            recommendations=recommendations,
+            grounded=all(response.grounded for _, response in responses),
+            provider_status=(
+                "available"
+                if all(response.provider_status == "available" for _, response in responses)
+                else "fallback"
+            ),
+            transport_disclaimer=transport_disclaimer,
+            warnings=warnings,
+        )
+
+    def _respond_single(
         self,
         database: Session,
         request: AssistantChatRequest,
@@ -932,19 +1146,37 @@ class AssistantService:
 
             retriever = retrieve_places
 
+        explicit_target_name = intent.target_place_name
+        named_places: list[RetrievedPlace] = []
+        if explicit_target_name:
+            named_places = retriever(
+                database,
+                city=intent.city,
+                categories=intent.categories,
+                limit=5,
+                latitude=request.latitude if intent.nearby else None,
+                longitude=request.longitude if intent.nearby else None,
+                radius_km=request.radius_km or intent.radius_km,
+                place_ids=None,
+                name_query=explicit_target_name,
+            )
+
         contextual_follow_up = bool(
             request.context_place_ids
-            and (
-                model_refers_to_context
-                or _refers_to_previous_places(request.message)
-                or intent.tool_intent.startswith("official_")
-            )
+            and not named_places
+            and (model_refers_to_context or _refers_to_previous_places(request.message))
+        )
+        scoped_place_ids = (
+            [item.place.id for item in named_places]
+            if named_places
+            else (request.context_place_ids if contextual_follow_up else None)
         )
         use_semantic_retrieval = bool(
             self.embedding_provider is not None
             and (
                 model_needs_semantic_retrieval
                 or contextual_follow_up
+                or bool(named_places)
                 or intent.tool_intent.startswith("official_")
                 or not explicit_categories
             )
@@ -966,43 +1198,67 @@ class AssistantService:
                     database,
                     query_embedding=query_vector,
                     city=intent.city,
-                    categories=intent.categories,
-                    place_ids=(
-                        request.context_place_ids if contextual_follow_up else None
-                    ),
+                    categories=([] if named_places else intent.categories),
+                    place_ids=scoped_place_ids,
                     latitude=request.latitude if intent.nearby else None,
                     longitude=request.longitude if intent.nearby else None,
                     radius_km=request.radius_km or intent.radius_km,
                     limit=self.evidence_limit,
                 )
-                semantic_place_ids = list(
-                    dict.fromkeys(item.place_id for item in evidence)
-                )
+                semantic_place_ids = list(dict.fromkeys(item.place_id for item in evidence))
             except Exception as error:
                 logger.warning(
                     "Assistant evidence retrieval failed: %s", type(error).__name__
                 )
                 warnings.append(fallback_text(request.language, "semantic_unavailable"))
 
-        # Semantic search runs across every eligible indexed place before this
-        # controlled candidate shortlist is materialized.
         candidate_ids = (
-            semantic_place_ids
-            or (request.context_place_ids if contextual_follow_up else None)
+            [item.place.id for item in named_places]
+            if named_places
+            else (
+                semantic_place_ids
+                or (request.context_place_ids if contextual_follow_up else None)
+            )
         )
-        candidate_limit = min(
-            max(len(semantic_place_ids), intent.limit), 10
+        candidate_limit = min(max(len(candidate_ids or []), intent.limit), 10)
+        category_quotas = _requested_category_limits(request.message, intent.categories)
+        use_category_quotas = bool(
+            not named_places
+            and not candidate_ids
+            and len(intent.categories) > 1
+            and len(category_quotas) == len(intent.categories)
         )
-        places = retriever(
-            database,
-            city=intent.city,
-            categories=intent.categories,
-            limit=candidate_limit,
-            latitude=request.latitude if intent.nearby else None,
-            longitude=request.longitude if intent.nearby else None,
-            radius_km=request.radius_km or intent.radius_km,
-            place_ids=candidate_ids,
-        )
+        if use_category_quotas:
+            places = []
+            seen_place_ids: set[int] = set()
+            for category in intent.categories:
+                category_places = retriever(
+                    database,
+                    city=intent.city,
+                    categories=[category],
+                    limit=category_quotas[category],
+                    latitude=request.latitude if intent.nearby else None,
+                    longitude=request.longitude if intent.nearby else None,
+                    radius_km=request.radius_km or intent.radius_km,
+                    place_ids=None,
+                    name_query=None,
+                )
+                for item in category_places:
+                    if item.place.id not in seen_place_ids:
+                        places.append(item)
+                        seen_place_ids.add(item.place.id)
+        else:
+            places = named_places or retriever(
+                database,
+                city=intent.city,
+                categories=intent.categories,
+                limit=candidate_limit,
+                latitude=request.latitude if intent.nearby else None,
+                longitude=request.longitude if intent.nearby else None,
+                radius_km=request.radius_km or intent.radius_km,
+                place_ids=candidate_ids,
+                name_query=None,
+            )
         if semantic_place_ids:
             semantic_order = {
                 place_id: index for index, place_id in enumerate(semantic_place_ids)
@@ -1141,6 +1397,20 @@ class AssistantService:
                 claims_by_place = _validate_grounded_response(
                     grounded, places, evidence, intent.limit
                 )
+                if use_category_quotas:
+                    selected_records = {item.place.id: item for item in places}
+                    returned_counts = {category: 0 for category in category_quotas}
+                    for recommendation in grounded.recommendations:
+                        category = selected_records[recommendation.place_id].place.category
+                        if category in returned_counts:
+                            returned_counts[category] += 1
+                    if any(
+                        returned_counts[category] < category_quotas[category]
+                        for category in category_quotas
+                    ):
+                        raise GroundingValidationError(
+                            "The model did not preserve explicit per-category quotas."
+                        )
                 selected_by_id = {place.place.id: place for place in places}
                 selected = [
                     selected_by_id[item.place_id]

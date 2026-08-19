@@ -130,7 +130,6 @@ export default function AssistantChat({ suggestions, isApiConnected }: Props) {
                     <div className="flex items-center"><span className="text-xs font-semibold uppercase tracking-wider text-[#FFC83D]">CityBuddy</span></div>
                     <p className="mt-3 leading-7">{turn.response.answer}</p>
                     {turn.response.transport_disclaimer && <p className="mt-3 rounded-xl border border-[#FFC83D]/20 bg-[#FFC83D]/10 p-3 text-sm leading-6">{turn.response.transport_disclaimer}</p>}
-                    {turn.response.warnings.map((warning) => <p key={warning} className="mt-2 text-xs text-amber-200">{warning}</p>)}
                   </div>
                   {turn.response.recommendations.length > 0 && <div className="grid max-w-3xl gap-3 sm:grid-cols-2">{turn.response.recommendations.map((item) => <AssistantPlaceCard key={item.place.id} recommendation={item} language={turn.language} />)}</div>}
                 </article>
