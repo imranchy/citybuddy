@@ -149,6 +149,36 @@ class OfficialSiteServiceTests(unittest.TestCase):
         self.assertEqual(result.source_url, "https://example.org/brands")
         self.assertIn("Men Women Kids", result.text)
 
+    def test_general_query_does_not_follow_unrelated_generic_hint(self):
+        requested: list[str] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            requested.append(str(request.url))
+            return httpx.Response(
+                200,
+                headers={"Content-Type": "text/html"},
+                text=(
+                    "<html><body>"
+                    "<a href='/shop/'>Shop</a>"
+                    "<p>Welcome to the museum.</p>"
+                    "</body></html>"
+                ),
+            )
+
+        with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+            result = fetch_official_site(
+                place_id=76,
+                place_name="Museum",
+                website="https://example.org/",
+                page_type="general",
+                query="accessibility wheelchair disabled barrier accessible",
+                client=client,
+                resolver=public_resolver,
+            )
+
+        self.assertEqual(requested, ["https://example.org/"])
+        self.assertEqual(result.source_url, "https://example.org/")
+
     def test_no_readable_static_content_returns_safe_unverified_evidence(self):
         def handler(request: httpx.Request) -> httpx.Response:
             return httpx.Response(

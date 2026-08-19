@@ -379,3 +379,46 @@ python -m scripts.report_image_coverage --city turin --run-id 13
 
 This provides the Milestone C coverage baseline without exposing image license
 or provenance metadata in the user-facing assistant UI.
+
+## Official-site knowledge refresh
+
+The daily refresh also has a bounded official-document indexing role for relatively
+stable visitor knowledge. `index_official_documents` starts only from reviewed
+production places that already have an official website stored by CityBuddy. The
+caller/model never supplies a URL. Retrieval reuses the official-site security
+boundary: HTTP(S) only, public DNS/IPs, same reviewed domain, same-domain links,
+bounded responses, sanitized text, and isolated source failures.
+
+The first supported stable document topics are accessibility, visitor services,
+permanent collections/highlights, shopping directories/collections, and dietary
+policy information. Volatile facts such as today's opening status, current menu
+items/prices, temporary closures, and current availability remain live-tool facts
+and are not treated as durable RAG knowledge.
+
+Each successful official document chunk is stored in `place_evidence` with its
+place ID, content type, exact official source URL, fetch timestamp, fingerprint,
+and embedding model. The source ID is application-owned and stable per topic/chunk.
+Only new or fingerprint-changed chunks are sent to bge-m3. A successfully refreshed
+topic may retire superseded chunk tails; a failed retrieval never deletes the last
+known evidence for that topic.
+
+Preview a small batch before applying it:
+
+```cmd
+python -m scripts.index_official_documents --city Torino --place-limit 2
+```
+
+Apply only after the preview looks reasonable:
+
+```cmd
+python -m scripts.index_official_documents --city Torino --place-limit 2 --apply
+```
+
+The normal daily runner invokes this phase automatically. It can be disabled for a
+specific run with `--skip-official-docs` or bounded with
+`--official-doc-place-limit` during smoke testing.
+
+This phase deliberately does not yet convert prose into typed production place
+columns. Structured fact extraction is a separate safety boundary: it should use a
+small schema, deterministic validation, advisory Qwen review only when necessary,
+and application-owned promotion before any database field is changed.

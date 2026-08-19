@@ -290,7 +290,15 @@ def _choose_same_domain_link(
         seen.add(absolute)
         haystack = f"{parsed.path} {parsed.query} {anchor_text}".casefold()
         hint_score = sum(3 for hint in hints if hint in haystack)
-        query_score = sum(2 for term in query_terms if term in haystack)
+        query_score = sum(5 for term in query_terms if term in haystack)
+        # When the caller supplied a bounded query, generic page-type hints must
+        # never be enough on their own to choose a link. This prevents an
+        # unrelated same-domain page (for example /shop/) from winning an
+        # accessibility refresh merely because ``general`` also knows about
+        # shopping pages. If no query-matching link exists, retrieval safely
+        # stays on the reviewed official homepage.
+        if query_terms and query_score == 0:
+            continue
         score = hint_score + query_score
         if score:
             candidates.append((-score, index, absolute))

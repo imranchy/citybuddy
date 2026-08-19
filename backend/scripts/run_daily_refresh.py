@@ -36,7 +36,7 @@ def parse_arguments() -> argparse.Namespace:
         description=(
             "Run CityBuddy's bounded once-daily refresh pipeline: OSM staging, "
             "agent review, safe place promotion, incremental evidence indexing, "
-            "and conservative Wikimedia image enrichment."
+            "bounded official-document refresh, and conservative Wikimedia image enrichment."
         )
     )
     parser.add_argument("--city", default="turin")
@@ -46,6 +46,12 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument("--retry-attempts", type=positive_integer, default=2)
     parser.add_argument("--review-timeout-seconds", type=positive_float)
     parser.add_argument("--index-batch-size", type=positive_integer, default=16)
+    parser.add_argument("--official-doc-place-limit", type=positive_integer)
+    parser.add_argument(
+        "--skip-official-docs",
+        action="store_true",
+        help="Skip stable official-site document retrieval/indexing for this execution.",
+    )
     parser.add_argument(
         "--resume-place-run-id",
         type=positive_integer,
@@ -274,6 +280,15 @@ def preview(arguments: argparse.Namespace, city: CityConfig) -> list[PhaseResult
             command_for("scripts.index_place_evidence", "--city", city.display_name),
         ),
     ]
+    if not arguments.skip_official_docs:
+        official_command = command_for(
+            "scripts.index_official_documents", "--city", city.display_name
+        )
+        if arguments.official_doc_place_limit is not None:
+            official_command.extend(
+                ["--place-limit", str(arguments.official_doc_place_limit)]
+            )
+        results.append(run_phase("Official document preview", official_command))
     if not arguments.skip_images:
         image_command = command_for(
             "scripts.collect_wikimedia_staging", "--city", arguments.city
@@ -368,6 +383,29 @@ def applied_refresh(arguments: argparse.Namespace, city: CityConfig) -> list[Pha
         "--apply",
     )
     results.append(run_phase("Evidence indexing", index_command))
+
+    if arguments.skip_official_docs:
+        results.append(
+            PhaseResult(
+                name="Official document refresh",
+                status="skipped",
+                detail="disabled by --skip-official-docs",
+            )
+        )
+    else:
+        official_command = command_for(
+            "scripts.index_official_documents",
+            "--city",
+            city.display_name,
+            "--batch-size",
+            str(arguments.index_batch_size),
+            "--apply",
+        )
+        if arguments.official_doc_place_limit is not None:
+            official_command.extend(
+                ["--place-limit", str(arguments.official_doc_place_limit)]
+            )
+        results.append(run_phase("Official document refresh", official_command))
 
     if arguments.skip_images:
         results.append(

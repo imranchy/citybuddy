@@ -4,6 +4,7 @@ from dataclasses import asdict, dataclass
 from hashlib import sha256
 from collections.abc import Callable
 from typing import Any
+from datetime import datetime
 
 from geoalchemy2 import Geography
 from sqlalchemy import cast, func, select
@@ -29,6 +30,8 @@ class EvidenceCandidate:
     attribution: str | None
     license: str | None
     fingerprint: str
+    content_type: str | None = None
+    source_fetched_at: datetime | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -79,6 +82,8 @@ def build_place_evidence(place: Place) -> EvidenceCandidate:
         attribution="OpenStreetMap contributors" if place.source == "osm" else place.source,
         license="ODbL" if place.source == "osm" else None,
         fingerprint=fingerprint,
+        content_type="place_profile",
+        source_fetched_at=None,
     )
 
 
