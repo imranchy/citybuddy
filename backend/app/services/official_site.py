@@ -22,7 +22,10 @@ OfficialPageType = Literal[
     "opening_info",
 ]
 
-OfficialRetrievalReason = Literal["no_readable_static_content"]
+OfficialRetrievalReason = Literal[
+    "no_readable_static_content",
+    "static_retrieval_blocked",
+]
 
 ALLOWED_CONTENT_TYPES = {
     "text/html",
@@ -32,8 +35,22 @@ ALLOWED_CONTENT_TYPES = {
 MAX_RESPONSE_BYTES = 512_000
 MAX_TEXT_CHARS = 12_000
 MAX_REDIRECTS = 3
+MAX_QUERY_CANDIDATE_PAGES = 3
+BLOCKED_STATIC_STATUS_CODES = {401, 403, 406, 429}
 REQUEST_TIMEOUT = httpx.Timeout(8.0, connect=5.0)
-USER_AGENT = "CityBuddy/0.1 official-site-retriever"
+USER_AGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/136.0.0.0 Safari/537.36 CityBuddy/0.1"
+)
+REQUEST_HEADERS = {
+    "User-Agent": USER_AGENT,
+    "Accept": (
+        "text/html,application/xhtml+xml,application/xml;q=0.9,"
+        "text/plain;q=0.8,*/*;q=0.5"
+    ),
+    "Accept-Language": "it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7",
+}
 
 # Temporary deterministic routing hints for the MVP.
 # These do not authorize URLs: candidate links must still come from the reviewed
@@ -171,6 +188,16 @@ class _PageExtractor(HTMLParser):
         return "\n".join(self._text_parts)
 
 
+class StaticRetrievalBlockedError(ValueError):
+    """The reviewed official site declined bounded static retrieval."""
+
+    def __init__(self, status_code: int) -> None:
+        self.status_code = status_code
+        super().__init__(
+            f"Official website blocks static retrieval (HTTP {status_code})."
+        )
+
+
 def _canonical_host(host: str) -> str:
     normalized = host.rstrip(".").casefold()
     if normalized.startswith("www."):
@@ -255,25 +282,85 @@ def _extract_page(content: str) -> _PageExtractor:
     return parser
 
 
+# Small deterministic aliases improve navigation on Italian official sites without
+# allowing the model to invent URLs. Candidate links still have to be extracted from
+# the reviewed official page and remain on the reviewed domain.
+QUERY_TERM_ALIASES: dict[str, tuple[str, ...]] = {
+    "shop": ("negozio", "negozi", "bottega", "botteghe", "artigiano", "artigiani"),
+    "shops": ("negozio", "negozi", "bottega", "botteghe", "artigiano", "artigiani"),
+    "store": ("negozio", "negozi", "bottega", "botteghe"),
+    "stores": ("negozio", "negozi", "bottega", "botteghe"),
+    "brand": ("marchio", "marchi"),
+    "brands": ("marchio", "marchi"),
+    "directory": ("elenco", "mappa", "botteghe", "artigiani"),
+    "facilities": ("strutture", "servizi", "come-funziona", "informazioni"),
+    "amenities": ("servizi", "strutture", "comfort"),
+    "visitor": ("visita", "visitatori", "informazioni", "info"),
+    "highlights": ("opere", "capolavori", "percorsi", "collezioni"),
+    "policy": ("informazioni", "allergeni", "intolleranze"),
+    "men": ("uomo",),
+    "women": ("donna",),
+    "kids": ("bambini", "bambino"),
+    "menu": ("carta", "menu", "menù", "piatti", "cucina"),
+    "vegetarian": ("vegetariano", "vegetariana", "vegetariani", "vegetariane"),
+    "vegan": ("vegano", "vegana", "vegani", "vegane"),
+    "dietary": ("alimentare", "alimentari", "dietetiche", "dietetici"),
+    "gluten": ("glutine", "celiachia", "celiaco", "celiaca"),
+    "allergens": ("allergeni", "allergie"),
+    "allergen": ("allergeni", "allergie"),
+    "food": ("cibo", "cucina", "mangiare", "ristorazione"),
+    "parking": ("parcheggio", "parcheggi"),
+    "services": ("servizi",),
+    "service": ("servizio", "servizi"),
+    "facilities": ("strutture", "servizi"),
+    "family": ("famiglia", "famiglie"),
+    "children": ("bambini", "bambino", "famiglie"),
+    "barrier": ("barriere", "senza-barriere"),
+    "accessibility": ("accessibilita", "accessibilità"),
+    "accessible": ("accessibile", "accessibili"),
+    "disabled": ("disabili", "disabilita", "disabilità"),
+    "wheelchair": ("sedia", "rotelle"),
+    "collections": ("collezione", "collezioni"),
+    "collection": ("collezione", "collezioni"),
+    "permanent": ("permanente", "permanenti"),
+    "halal": ("halal",),
+}
+
+
 def _query_terms(query: str | None) -> tuple[str, ...]:
     if not query:
         return ()
     words = re.findall(r"[\wÀ-ÿ]+", query.casefold(), flags=re.UNICODE)
-    return tuple(dict.fromkeys(word for word in words if len(word) >= 3))[:24]
+    expanded: list[str] = []
+    for word in words:
+        if len(word) < 3:
+            continue
+        expanded.append(word)
+        expanded.extend(QUERY_TERM_ALIASES.get(word, ()))
+    return tuple(dict.fromkeys(expanded))[:64]
 
 
-def _choose_same_domain_link(
+def _link_term_matches(haystack: str, term: str) -> bool:
+    """Match whole words/phrases so short terms never match inside other words."""
+
+    escaped = re.escape(term.casefold()).replace(r"\ ", r"[\s/_-]+")
+    return re.search(rf"(?<!\w){escaped}(?!\w)", haystack.casefold(), re.UNICODE) is not None
+
+
+def _rank_same_domain_links(
     parser: _PageExtractor,
     *,
     base_url: str,
     page_type: OfficialPageType,
     official_host: str,
     query: str | None = None,
-) -> str | None:
+) -> list[str]:
+    """Rank bounded same-domain candidates extracted from one verified page."""
+
     hints = PAGE_HINTS[page_type]
     query_terms = _query_terms(query)
     if not hints and not query_terms:
-        return None
+        return []
 
     candidates: list[tuple[int, int, str]] = []
     seen: set[str] = set()
@@ -285,28 +372,56 @@ def _choose_same_domain_link(
         if _canonical_host(parsed.hostname) != _canonical_host(official_host):
             continue
         absolute = urlunsplit((parsed.scheme, parsed.netloc, parsed.path or "/", parsed.query, ""))
-        if absolute in seen:
+        if absolute in seen or absolute == base_url:
             continue
         seen.add(absolute)
         haystack = f"{parsed.path} {parsed.query} {anchor_text}".casefold()
-        hint_score = sum(3 for hint in hints if hint in haystack)
-        query_score = sum(5 for term in query_terms if term in haystack)
-        # When the caller supplied a bounded query, generic page-type hints must
-        # never be enough on their own to choose a link. This prevents an
-        # unrelated same-domain page (for example /shop/) from winning an
-        # accessibility refresh merely because ``general`` also knows about
-        # shopping pages. If no query-matching link exists, retrieval safely
-        # stays on the reviewed official homepage.
+        hint_score = sum(3 for hint in hints if _link_term_matches(haystack, hint))
+        query_score = sum(5 for term in query_terms if _link_term_matches(haystack, term))
         if query_terms and query_score == 0:
             continue
         score = hint_score + query_score
         if score:
             candidates.append((-score, index, absolute))
 
-    if not candidates:
-        return None
     candidates.sort()
-    return candidates[0][2]
+    return [url for _, _, url in candidates]
+
+
+def _choose_same_domain_link(
+    parser: _PageExtractor,
+    *,
+    base_url: str,
+    page_type: OfficialPageType,
+    official_host: str,
+    query: str | None = None,
+) -> str | None:
+    ranked = _rank_same_domain_links(
+        parser,
+        base_url=base_url,
+        page_type=page_type,
+        official_host=official_host,
+        query=query,
+    )
+    return ranked[0] if ranked else None
+
+
+def _page_query_score(
+    parser: _PageExtractor,
+    *,
+    source_url: str,
+    query: str | None,
+) -> int:
+    """Score fetched page content against the bounded caller query."""
+
+    terms = _query_terms(query)
+    if not terms:
+        return 0
+    metadata = f"{source_url} {parser.title or ''}"
+    body = parser.text[:MAX_TEXT_CHARS]
+    metadata_score = sum(4 for term in terms if _link_term_matches(metadata, term))
+    body_score = sum(1 for term in terms if _link_term_matches(body, term))
+    return metadata_score + body_score
 
 
 def _read_bounded_stream(response: httpx.Response) -> tuple[str, bool]:
@@ -360,10 +475,7 @@ def _request_page(
             with client.stream(
                 "GET",
                 current,
-                headers={
-                    "User-Agent": USER_AGENT,
-                    "Accept": "text/html,text/plain,application/xhtml+xml;q=0.9",
-                },
+                headers=REQUEST_HEADERS,
                 follow_redirects=False,
             ) as response:
                 if response.is_redirect:
@@ -377,6 +489,8 @@ def _request_page(
                     current = urljoin(current, location)
                     continue
 
+                if response.status_code in BLOCKED_STATIC_STATUS_CODES:
+                    raise StaticRetrievalBlockedError(response.status_code)
                 response.raise_for_status()
                 text, truncated = _read_bounded_stream(response)
                 return current, text, truncated
@@ -411,30 +525,89 @@ def fetch_official_site(
     owns_client = client is None
     http_client = client or httpx.Client(timeout=REQUEST_TIMEOUT)
     try:
-        source_url, content, truncated = _request_page(
-            http_client,
-            official_url,
-            official_host=official_host,
-            resolver=resolver,
-        )
-        parsed = _extract_page(content)
-
-        selected = _choose_same_domain_link(
-            parsed,
-            base_url=source_url,
-            page_type=page_type,
-            official_host=official_host,
-            query=query,
-        )
-        if selected is not None and selected != source_url:
-            source_url, content, selected_truncated = _request_page(
+        try:
+            source_url, content, truncated = _request_page(
                 http_client,
-                selected,
+                official_url,
                 official_host=official_host,
                 resolver=resolver,
             )
-            parsed = _extract_page(content)
-            truncated = truncated or selected_truncated
+        except StaticRetrievalBlockedError:
+            return OfficialSiteEvidence(
+                place_id=place_id,
+                place_name=place_name,
+                page_type=page_type,
+                official_host=_canonical_host(official_host),
+                source_url=official_url,
+                fetched_at=datetime.now(timezone.utc),
+                verified=False,
+                reason="static_retrieval_blocked",
+                title=None,
+                text=None,
+                truncated=False,
+            )
+
+        parsed = _extract_page(content)
+
+        if query:
+            # One bounded hop only. Rank links discovered on the reviewed homepage,
+            # fetch at most a few top candidates, and keep whichever fetched page
+            # has the strongest deterministic query evidence. The model never
+            # supplies or selects a URL.
+            best_url = source_url
+            best_parser = parsed
+            best_truncated = truncated
+            best_score = _page_query_score(parsed, source_url=source_url, query=query)
+            ranked = _rank_same_domain_links(
+                parsed,
+                base_url=source_url,
+                page_type=page_type,
+                official_host=official_host,
+                query=query,
+            )
+            for candidate_url in ranked[:MAX_QUERY_CANDIDATE_PAGES]:
+                try:
+                    candidate_source, candidate_content, candidate_truncated = _request_page(
+                        http_client,
+                        candidate_url,
+                        official_host=official_host,
+                        resolver=resolver,
+                    )
+                except (StaticRetrievalBlockedError, ValueError):
+                    # A broken/blocked candidate must not discard a readable reviewed
+                    # homepage or prevent trying another bounded same-domain candidate.
+                    continue
+                candidate_parser = _extract_page(candidate_content)
+                candidate_score = _page_query_score(
+                    candidate_parser,
+                    source_url=candidate_source,
+                    query=query,
+                )
+                if candidate_score > best_score:
+                    best_url = candidate_source
+                    best_parser = candidate_parser
+                    best_truncated = truncated or candidate_truncated
+                    best_score = candidate_score
+            source_url = best_url
+            parsed = best_parser
+            truncated = best_truncated
+        else:
+            selected = _choose_same_domain_link(
+                parsed,
+                base_url=source_url,
+                page_type=page_type,
+                official_host=official_host,
+                query=None,
+            )
+            if selected is not None and selected != source_url:
+                source_url, content, selected_truncated = _request_page(
+                    http_client,
+                    selected,
+                    official_host=official_host,
+                    resolver=resolver,
+                )
+                parsed = _extract_page(content)
+                truncated = truncated or selected_truncated
 
         text = parsed.text.strip()
         if len(text) > MAX_TEXT_CHARS:

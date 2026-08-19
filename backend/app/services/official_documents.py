@@ -30,22 +30,22 @@ OFFICIAL_DOCUMENT_TOPICS: tuple[OfficialDocumentTopic, ...] = (
     ),
     OfficialDocumentTopic(
         key="visitor_services",
-        query="visitor services facilities amenities parking family children",
+        query="visitor services facilities amenities parking family children info toilets",
         title="Visitor services and facilities",
     ),
     OfficialDocumentTopic(
         key="collections",
-        query="permanent collections collection visitor highlights",
+        query="permanent collections collection visitor highlights works masterpieces",
         title="Permanent collections and visitor highlights",
     ),
     OfficialDocumentTopic(
         key="shopping_directory",
-        query="shops stores brands directory men women kids collections",
+        query="shops stores brands directory men women kids collections botteghe artigiani",
         title="Shops, brands and collections",
     ),
     OfficialDocumentTopic(
         key="dietary_policy",
-        query="dietary vegetarian vegan gluten allergens halal food policy",
+        query="dietary vegetarian vegan gluten allergens halal food policy menu intolleranze",
         title="Dietary and food policy information",
     ),
 )
@@ -61,19 +61,22 @@ TOPIC_RELEVANCE_TERMS: dict[str, tuple[str, ...]] = {
     "visitor_services": (
         "facility", "facilities", "amenity", "amenities", "parking", "family",
         "children", "service", "services", "servizi", "parcheggio", "famiglie",
-        "bambini", "guardaroba", "toilet", "restroom",
+        "bambini", "guardaroba", "toilet", "toilettes", "restroom", "infopoint",
     ),
     "collections": (
         "permanent collection", "permanent collections", "collection", "collections",
         "collezione", "collezioni", "permanente", "permanenti", "highlights",
+        "opere", "capolavori", "percorso", "percorsi",
     ),
     "shopping_directory": (
         "shop", "shops", "store", "stores", "brand", "brands", "directory",
         "men", "women", "kids", "negozi", "marchi", "uomo", "donna", "bambini",
+        "bottega", "botteghe", "artigiano", "artigiani",
     ),
     "dietary_policy": (
         "vegetarian", "vegan", "gluten", "allergen", "allergens", "halal",
         "dietary", "vegetar", "vegano", "vegana", "allerg", "celiac", "senza glutine",
+        "intolleranza", "intolleranze", "menu", "menù",
     ),
 }
 
@@ -148,6 +151,7 @@ def _topic_relevant(topic: OfficialDocumentTopic, evidence: OfficialSiteEvidence
         strong = {
             "store", "stores", "brand", "brands", "directory", "men", "women",
             "kids", "negozi", "marchi", "uomo", "donna", "bambini",
+            "bottega", "botteghe", "artigiano", "artigiani",
         }
         return bool(matched & strong) and len(matched) >= 2
 
@@ -258,6 +262,7 @@ def collect_official_document_candidates(
     *,
     city: str,
     place_limit: int | None = None,
+    place_id: int | None = None,
     topic_keys: Iterable[str] | None = None,
 ) -> OfficialDocumentCollection:
     """Collect stable official-site evidence from reviewed production places only.
@@ -276,6 +281,8 @@ def collect_official_document_candidates(
         )
         .order_by(Place.id)
     )
+    if place_id is not None:
+        statement = statement.where(Place.id == place_id)
     if place_limit is not None:
         statement = statement.limit(place_limit)
     places = list(database.scalars(statement).all())

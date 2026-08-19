@@ -1,8 +1,11 @@
 import argparse
 
+from sqlalchemy import select
+
 from app.core.config import settings
 from app.db.database import SessionLocal
 from app.llm.embeddings import OllamaEmbeddingProvider
+from app.models.place import Place
 from app.services.official_documents import (
     OFFICIAL_DOCUMENT_TOPICS,
     collect_official_document_candidates,
@@ -26,7 +29,9 @@ def parse_arguments() -> argparse.Namespace:
         )
     )
     parser.add_argument("--city", default="Torino")
-    parser.add_argument("--place-limit", type=positive_integer)
+    scope = parser.add_mutually_exclusive_group()
+    scope.add_argument("--place-limit", type=positive_integer)
+    scope.add_argument("--place-id", type=positive_integer)
     parser.add_argument("--batch-size", type=positive_integer, default=16)
     parser.add_argument(
         "--topic",
@@ -38,14 +43,28 @@ def parse_arguments() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def require_reviewed_place(database, *, place_id: int | None, city: str) -> None:
+    if place_id is None:
+        return
+    existing = database.scalar(
+        select(Place.id).where(Place.id == place_id, Place.city.ilike(city))
+    )
+    if existing is None:
+        raise SystemExit(
+            f"Place {place_id} is not a reviewed production place in {city}."
+        )
+
+
 def main() -> None:
     arguments = parse_arguments()
     database = SessionLocal()
     try:
+        require_reviewed_place(database, place_id=arguments.place_id, city=arguments.city)
         collection = collect_official_document_candidates(
             database,
             city=arguments.city,
             place_limit=arguments.place_limit,
+            place_id=arguments.place_id,
             topic_keys=arguments.topic,
         )
         pending = pending_official_document_candidates(

@@ -422,3 +422,16 @@ This phase deliberately does not yet convert prose into typed production place
 columns. Structured fact extraction is a separate safety boundary: it should use a
 small schema, deterministic validation, advisory Qwen review only when necessary,
 and application-owned promotion before any database field is changed.
+
+## Typed official facts
+
+After stable official-site documents are refreshed, CityBuddy can extract a small allowlisted
+set of durable structured facts from that already-verified evidence with Qwen. The extractor
+never receives a URL to browse and cannot write to production. Application code requires a
+verbatim grounded excerpt, validates the fact type/value against deterministic policy, and
+only then promotes the fact into `place_facts` with source URL, source timestamp, fingerprint,
+and extractor model provenance. Unknown facts are omitted rather than guessed.
+
+Current fact vocabulary is intentionally small: wheelchair accessibility, accessible toilets,
+parking, family facilities, vegetarian options, vegan options, and explicit halal status.
+Volatile facts remain on the live official-site retrieval path.

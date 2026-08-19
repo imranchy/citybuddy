@@ -6,6 +6,7 @@ from app.db.database import Base, database_url, engine
 from app.models.place import Place  # noqa: F401
 from app.models.place_image import PlaceImage  # noqa: F401
 from app.models.evidence import PlaceEvidence  # noqa: F401
+from app.models.place_fact import PlaceFact  # noqa: F401
 from app.models.ingestion import (  # noqa: F401
     AgentReviewDecision,
     ImagePromotionBatch,

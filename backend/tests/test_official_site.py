@@ -37,6 +37,140 @@ def public_resolver(host: str, port: int) -> set[str]:
 
 
 class OfficialSiteServiceTests(unittest.TestCase):
+    def test_requests_send_browser_compatible_content_headers(self):
+        observed: dict[str, str] = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            observed["user_agent"] = request.headers.get("user-agent", "")
+            observed["accept"] = request.headers.get("accept", "")
+            observed["accept_language"] = request.headers.get("accept-language", "")
+            return httpx.Response(
+                200,
+                headers={"Content-Type": "text/html"},
+                text="<html><body>Official information</body></html>",
+            )
+
+        with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+            result = fetch_official_site(
+                place_id=76,
+                place_name="Cafe",
+                website="https://example.org/",
+                page_type="general",
+                client=client,
+                resolver=public_resolver,
+            )
+
+        self.assertTrue(result.verified)
+        self.assertIn("Mozilla/5.0", observed["user_agent"])
+        self.assertIn("CityBuddy/0.1", observed["user_agent"])
+        self.assertIn("text/html", observed["accept"])
+        self.assertIn("application/xhtml+xml", observed["accept"])
+        self.assertIn("it-IT", observed["accept_language"])
+
+    def test_static_retrieval_block_returns_safe_unverified_evidence(self):
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(406, headers={"Content-Type": "text/html"}, text="blocked")
+
+        with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+            result = fetch_official_site(
+                place_id=1015,
+                place_name="Avocuddle cafe",
+                website="https://example.org/",
+                page_type="general",
+                query="menu vegetarian vegan dietary",
+                client=client,
+                resolver=public_resolver,
+            )
+
+        self.assertFalse(result.verified)
+        self.assertEqual(result.reason, "static_retrieval_blocked")
+        self.assertIsNone(result.text)
+
+    def test_query_one_hop_supports_all_current_document_topic_aliases(self):
+        cases = (
+            ("accessibility wheelchair disabled barrier accessible", "/accessibilita/", "Accessibilità sedia a rotelle"),
+            ("visitor services facilities amenities parking family children info toilets", "/info/", "Servizi parcheggio toilettes famiglie"),
+            ("permanent collections collection visitor highlights works masterpieces", "/collezioni/", "Collezioni permanenti opere e capolavori"),
+            ("shops stores brands directory men women kids collections botteghe artigiani", "/botteghe/", "Botteghe artigiani negozi e marchi"),
+            ("dietary vegetarian vegan gluten allergens halal food policy menu intolleranze", "/menu/", "Menu vegetariano vegano allergeni e intolleranze"),
+        )
+
+        for query, path, body in cases:
+            with self.subTest(path=path):
+                requested: list[str] = []
+
+                def handler(request: httpx.Request) -> httpx.Response:
+                    requested.append(str(request.url))
+                    if request.url.path == "/":
+                        anchor = path.strip("/").replace("-", " ")
+                        return httpx.Response(
+                            200,
+                            headers={"Content-Type": "text/html"},
+                            text=f"<html><body><a href='{path}'>{anchor}</a></body></html>",
+                        )
+                    return httpx.Response(
+                        200,
+                        headers={"Content-Type": "text/html"},
+                        text=f"<html><body>{body}</body></html>",
+                    )
+
+                with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+                    result = fetch_official_site(
+                        place_id=1,
+                        place_name="Example",
+                        website="https://example.org/",
+                        page_type="general",
+                        query=query,
+                        client=client,
+                        resolver=public_resolver,
+                    )
+
+                self.assertTrue(result.verified)
+                self.assertEqual(result.source_url, f"https://example.org{path}")
+                self.assertIn(body.split()[0], result.text or "")
+                self.assertLessEqual(len(requested), 1 + 3)
+
+    def test_query_one_hop_can_skip_weak_candidate_for_stronger_page(self):
+        requested: list[str] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            requested.append(str(request.url))
+            if request.url.path == "/":
+                return httpx.Response(
+                    200,
+                    headers={"Content-Type": "text/html"},
+                    text=(
+                        "<html><body>"
+                        "<a href='/shop/'>Shop</a>"
+                        "<a href='/botteghe/'>Le botteghe degli artigiani</a>"
+                        "</body></html>"
+                    ),
+                )
+            if request.url.path == "/shop/":
+                return httpx.Response(
+                    200, headers={"Content-Type": "text/html"},
+                    text="<html><body>Gift shop</body></html>",
+                )
+            return httpx.Response(
+                200, headers={"Content-Type": "text/html"},
+                text="<html><body>Botteghe artigiani negozi marchi</body></html>",
+            )
+
+        with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+            result = fetch_official_site(
+                place_id=3386,
+                place_name="Mercato",
+                website="https://example.org/",
+                page_type="general",
+                query="shops stores brands directory botteghe artigiani",
+                client=client,
+                resolver=public_resolver,
+            )
+
+        self.assertEqual(result.source_url, "https://example.org/botteghe/")
+        self.assertIn("marchi", result.text or "")
+        self.assertIn("https://example.org/botteghe/", requested)
+
     def test_private_network_resolution_is_rejected(self):
         with self.assertRaisesRegex(ValueError, "non-public network address"):
             validate_public_http_url(
@@ -148,6 +282,75 @@ class OfficialSiteServiceTests(unittest.TestCase):
         self.assertEqual(requested, ["https://example.org/", "https://example.org/brands"])
         self.assertEqual(result.source_url, "https://example.org/brands")
         self.assertIn("Men Women Kids", result.text)
+
+    def test_general_query_can_follow_italian_shopping_alias_link(self):
+        requested: list[str] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            requested.append(str(request.url))
+            if request.url.path == "/":
+                return httpx.Response(
+                    200,
+                    headers={"Content-Type": "text/html"},
+                    text=(
+                        "<html><body>"
+                        "<a href='/torino/botteghe/'>Scopri gli artigiani</a>"
+                        "<a href='/eventi/'>Appuntamenti</a>"
+                        "</body></html>"
+                    ),
+                )
+            self.assertEqual(request.url.path, "/torino/botteghe/")
+            return httpx.Response(
+                200,
+                headers={"Content-Type": "text/html"},
+                text="<html><body>Botteghe e artigiani del mercato</body></html>",
+            )
+
+        with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+            result = fetch_official_site(
+                place_id=3386,
+                place_name="Mercato Centrale Torino",
+                website="https://example.org/",
+                page_type="general",
+                query="shops stores brands directory men women kids collections",
+                client=client,
+                resolver=public_resolver,
+            )
+
+        self.assertEqual(requested, ["https://example.org/", "https://example.org/torino/botteghe/"])
+        self.assertIn("artigiani", result.text or "")
+
+    def test_general_query_can_follow_italian_food_alias_link(self):
+        requested: list[str] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            requested.append(str(request.url))
+            if request.url.path == "/":
+                return httpx.Response(
+                    200,
+                    headers={"Content-Type": "text/html"},
+                    text="<html><body><a href='/cucina/'>La cucina</a></body></html>",
+                )
+            self.assertEqual(request.url.path, "/cucina/")
+            return httpx.Response(
+                200,
+                headers={"Content-Type": "text/html"},
+                text="<html><body>Menu e opzioni vegetariane</body></html>",
+            )
+
+        with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+            result = fetch_official_site(
+                place_id=1015,
+                place_name="Cafe",
+                website="https://example.org/",
+                page_type="general",
+                query="menu vegetarian vegan dietary",
+                client=client,
+                resolver=public_resolver,
+            )
+
+        self.assertEqual(requested, ["https://example.org/", "https://example.org/cucina/"])
+        self.assertIn("vegetariane", result.text or "")
 
     def test_general_query_does_not_follow_unrelated_generic_hint(self):
         requested: list[str] = []

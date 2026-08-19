@@ -21,7 +21,9 @@ class DailyRefreshTests(unittest.TestCase):
             review_timeout_seconds=None,
             index_batch_size=16,
             official_doc_place_limit=None,
+            official_fact_place_limit=None,
             skip_official_docs=False,
+            skip_official_facts=False,
             resume_place_run_id=None,
             resume_image_run_id=None,
             skip_images=False,
@@ -68,6 +70,7 @@ class DailyRefreshTests(unittest.TestCase):
                 "Place promotion",
                 "Evidence indexing",
                 "Official document refresh",
+                "Official fact refresh",
                 "Wikimedia collection",
                 "Image promotion",
             ],
@@ -75,7 +78,7 @@ class DailyRefreshTests(unittest.TestCase):
         executed = [call.args[0] for call in run_phase.call_args_list]
         self.assertEqual(
             executed,
-            ["Place review", "Place promotion", "Evidence indexing", "Official document refresh"],
+            ["Place review", "Place promotion", "Evidence indexing", "Official document refresh", "Official fact refresh"],
         )
         has_eligible_places.assert_called_once_with(41)
         has_eligible_images.assert_called_once_with(52)
@@ -243,6 +246,51 @@ class DailyRefreshTests(unittest.TestCase):
         self.assertEqual(official.status, "skipped")
         executed = [call.args[0] for call in run_phase.call_args_list]
         self.assertNotIn("Official document refresh", executed)
+
+    @patch("scripts.run_daily_refresh.collect_image_run")
+    @patch("scripts.run_daily_refresh.has_eligible_images", return_value=False)
+    @patch("scripts.run_daily_refresh.run_phase")
+    @patch("scripts.run_daily_refresh.collect_place_run")
+    def test_official_fact_refresh_is_independent_of_osm_failure(
+        self, collect_place_run, run_phase, has_eligible_images, collect_image_run
+    ) -> None:
+        collect_place_run.return_value = (
+            None, PhaseResult("OSM collection", "failed", "source unavailable")
+        )
+        collect_image_run.return_value = (
+            52, PhaseResult("Wikimedia collection", "completed")
+        )
+        run_phase.side_effect = lambda name, command: PhaseResult(name, "completed")
+
+        results = applied_refresh(self.arguments, self.city)
+
+        fact = next(result for result in results if result.name == "Official fact refresh")
+        self.assertEqual(fact.status, "completed")
+        executed = [call.args[0] for call in run_phase.call_args_list]
+        self.assertIn("Official fact refresh", executed)
+
+    @patch("scripts.run_daily_refresh.collect_image_run")
+    @patch("scripts.run_daily_refresh.has_eligible_images", return_value=False)
+    @patch("scripts.run_daily_refresh.run_phase")
+    @patch("scripts.run_daily_refresh.collect_place_run")
+    def test_official_fact_refresh_can_be_skipped(
+        self, collect_place_run, run_phase, has_eligible_images, collect_image_run
+    ) -> None:
+        self.arguments.skip_official_facts = True
+        collect_place_run.return_value = (
+            None, PhaseResult("OSM collection", "failed", "source unavailable")
+        )
+        collect_image_run.return_value = (
+            52, PhaseResult("Wikimedia collection", "completed")
+        )
+        run_phase.side_effect = lambda name, command: PhaseResult(name, "completed")
+
+        results = applied_refresh(self.arguments, self.city)
+
+        fact = next(result for result in results if result.name == "Official fact refresh")
+        self.assertEqual(fact.status, "skipped")
+        executed = [call.args[0] for call in run_phase.call_args_list]
+        self.assertNotIn("Official fact refresh", executed)
 
 
 if __name__ == "__main__":

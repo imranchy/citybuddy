@@ -28,6 +28,20 @@ class _Database:
 
 
 class OfficialDocumentTests(unittest.TestCase):
+    def test_target_place_validation_accepts_existing_and_rejects_unknown_id(self) -> None:
+        from scripts.index_official_documents import require_reviewed_place
+
+        class _ScopeDatabase:
+            def __init__(self, value):
+                self.value = value
+
+            def scalar(self, statement):
+                return self.value
+
+        require_reviewed_place(_ScopeDatabase(1015), place_id=1015, city="Torino")
+        with self.assertRaises(SystemExit):
+            require_reviewed_place(_ScopeDatabase(None), place_id=999999, city="Torino")
+
     def test_unknown_topic_is_rejected_before_retrieval(self) -> None:
         with self.assertRaises(ValueError):
             resolve_topics(["anything-on-the-web"])
@@ -207,6 +221,38 @@ class OfficialDocumentTests(unittest.TestCase):
         self.assertEqual(collection.completed_topics[(2, "shopping_directory")], set())
         self.assertEqual(collection.completed_topics[(2, "dietary_policy")], set())
         retrieve.assert_not_called()
+
+    @patch("app.services.official_documents.get_official_place_page")
+    def test_market_homepage_with_botteghe_and_artigiani_is_shopping_evidence(self, retrieve) -> None:
+        place = SimpleNamespace(
+            id=3386,
+            name="Mercato Centrale Torino",
+            city="Torino",
+            category="shopping_centre",
+            website="https://www.mercatocentrale.it/torino/",
+        )
+        retrieve.return_value = OfficialSiteEvidence(
+            place_id=3386,
+            place_name=place.name,
+            page_type="general",
+            official_host="mercatocentrale.it",
+            source_url=place.website,
+            fetched_at=datetime(2026, 8, 19, tzinfo=timezone.utc),
+            verified=True,
+            reason=None,
+            title="Mercato Centrale Torino",
+            text="28 botteghe degli artigiani. Scopri tutte le botteghe artigiane del mercato.",
+            truncated=False,
+        )
+
+        collection = collect_official_document_candidates(
+            _Database([place]),
+            city="Torino",
+            topic_keys=["shopping_directory"],
+        )
+
+        self.assertEqual(len(collection.candidates), 1)
+        self.assertEqual(collection.candidates[0].content_type, "shopping_directory")
 
     @patch("app.services.official_documents.get_official_place_page")
     def test_shopping_centre_can_collect_shopping_directory(self, retrieve) -> None:
