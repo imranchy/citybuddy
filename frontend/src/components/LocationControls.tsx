@@ -1,6 +1,10 @@
 "use client";
 
+import type { Language } from "@/types/language";
+import { FILTER_COPY } from "@/lib/i18n";
+
 type LocationControlsProps = {
+  language: Language;
   radiusKm: number;
   isLocating: boolean;
   locationStatus: string;
@@ -11,6 +15,7 @@ type LocationControlsProps = {
 };
 
 export default function LocationControls({
+  language,
   radiusKm,
   isLocating,
   locationStatus,
@@ -19,6 +24,7 @@ export default function LocationControls({
   onUseLocation,
   onExitNearbyMode,
 }: LocationControlsProps) {
+  const t = FILTER_COPY[language];
   return (
     <div className="mt-4 flex flex-col gap-4 rounded-3xl border border-white/10 bg-[#121936] p-5 sm:flex-row sm:items-end">
       <div className="sm:w-52">
@@ -26,7 +32,7 @@ export default function LocationControls({
           htmlFor="radius-filter"
           className="mb-2 block text-xs font-semibold uppercase tracking-[0.15em] text-[#A9B1D6]"
         >
-          Search radius
+          {t.radius}
         </label>
 
         <select
@@ -51,7 +57,7 @@ export default function LocationControls({
         onClick={onUseLocation}
         className="min-h-12 rounded-xl bg-[#FFC83D] px-5 font-semibold text-[#070B24] transition hover:bg-[#FFD66B] disabled:cursor-not-allowed disabled:opacity-50"
       >
-        {isLocating ? "Finding location..." : "Use my location"}
+        {isLocating ? t.finding : t.useLocation}
       </button>
 
       {isNearbyMode && (
@@ -60,7 +66,7 @@ export default function LocationControls({
           onClick={onExitNearbyMode}
           className="min-h-12 rounded-xl border border-white/10 px-5 text-[#A9B1D6] transition hover:border-[#FF6846]/50 hover:text-[#FFF8E7]"
         >
-          Show all places
+          {t.showAll}
         </button>
       )}
 

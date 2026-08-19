@@ -5,53 +5,13 @@ import { useEffect, useState } from "react";
 import { getHealth } from "@/lib/api";
 import AssistantChat from "@/components/AssistantChat";
 import PlacesSection from "@/components/PlacesSection";
-
-const suggestedSearches = [
-  {
-    label: "Near me",
-    query: "Interesting places near me",
-  },
-  {
-    label: "Food & drink",
-    query: "Good local food and drink",
-  },
-  {
-    label: "Culture",
-    query: "Museums, monuments and cultural attractions",
-  },
-  {
-    label: "Outdoors",
-    query: "Parks, gardens and viewpoints",
-  },
-  {
-    label: "Places of worship",
-    query: "Churches, mosques, temples and other places of worship",
-  },
-];
-
-const features = [
-  {
-    icon: "⌖",
-    title: "Location aware",
-    description:
-      "Find places based on your current location, neighbourhood or preferred search radius.",
-  },
-  {
-    icon: "✦",
-    title: "Personalised search",
-    description:
-      "Search naturally using your interests, location, budget, accessibility needs and preferred atmosphere.",
-  },
-  {
-    icon: "✓",
-    title: "Clear recommendations",
-    description:
-      "Get concise suggestions with useful reasons that match what you asked for.",
-  },
-];
+import { PAGE_COPY } from "@/lib/i18n";
+import { LANGUAGE_OPTIONS, type Language } from "@/types/language";
 
 export default function Home() {
   const [isApiConnected, setIsApiConnected] = useState(false);
+  const [language, setLanguage] = useState<Language>("en");
+  const t = PAGE_COPY[language];
 
   useEffect(() => {
     const controller = new AbortController();
@@ -74,6 +34,18 @@ export default function Home() {
     return () => controller.abort();
   }, []);
 
+  useEffect(() => {
+    const saved = window.localStorage.getItem("citybuddy-language") as Language | null;
+    if (saved && LANGUAGE_OPTIONS.some((option) => option.value === saved)) {
+      setLanguage(saved);
+    }
+  }, []);
+
+  useEffect(() => {
+    window.localStorage.setItem("citybuddy-language", language);
+    document.documentElement.lang = language;
+  }, [language]);
+
   return (
     <main className="min-h-screen bg-[#070B24] text-[#FFF8E7]">
       <nav className="border-b border-white/10">
@@ -94,11 +66,27 @@ export default function Home() {
               </p>
 
               <p className="text-xs font-medium text-[#FF6846]">
-                Turin
+                {t.city}
               </p>
             </div>
           </div>
 
+          <label className="flex items-center gap-2 rounded-full border border-white/10 bg-[#0B112B] px-3 py-2 text-sm text-[#FFF8E7]">
+            <span aria-hidden="true" className="text-base">🌐</span>
+            <span className="hidden text-xs font-semibold uppercase tracking-wider text-[#A9B1D6] sm:inline">{t.language}</span>
+            <select
+              aria-label={t.language}
+              value={language}
+              onChange={(event) => setLanguage(event.target.value as Language)}
+              className="bg-transparent text-sm font-medium outline-none"
+            >
+              {LANGUAGE_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value} className="bg-[#0B112B]">
+                  {option.flag} {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
       </nav>
 
@@ -113,32 +101,32 @@ export default function Home() {
 
         <div className="relative mx-auto max-w-4xl text-center">
           <p className="mb-5 text-xs font-semibold uppercase tracking-[0.25em] text-[#FFC83D] sm:text-sm sm:tracking-[0.3em]">
-            Your local discovery assistant
+            {t.eyebrow}
           </p>
 
           <h1
             id="hero-heading"
             className="text-4xl font-bold leading-tight tracking-tight sm:text-5xl md:text-7xl"
           >
-            What would you like
+            {t.titleA}
             <span className="block text-[#FF6846]">
-              to discover today?
+              {t.titleB}
             </span>
           </h1>
 
           <p className="mx-auto mt-6 max-w-2xl text-base leading-7 text-[#A9B1D6] sm:mt-7 sm:text-lg sm:leading-8">
-            Discover food, culture, nature, nightlife, markets, community
-            spaces, places of worship and more around your city.
+            {t.description}
           </p>
 
           <AssistantChat
-            suggestions={suggestedSearches}
+            suggestions={t.suggestions}
             isApiConnected={isApiConnected}
+            language={language}
           />
         </div>
       </section>
 
-      <PlacesSection />
+      <PlacesSection language={language} />
 
       <section
         aria-labelledby="features-heading"
@@ -150,7 +138,7 @@ export default function Home() {
           </h2>
 
           <div className="grid gap-5 md:grid-cols-3">
-            {features.map((feature) => (
+            {t.features.map((feature) => (
               <article
                 key={feature.title}
                 className="rounded-3xl border border-white/10 bg-[#121936] p-6 transition duration-200 hover:-translate-y-1 hover:border-[#FF6846]/40 sm:p-7"
@@ -176,7 +164,7 @@ export default function Home() {
       </section>
 
       <footer className="border-t border-white/10 px-4 py-8 text-center text-sm text-[#A9B1D6] sm:px-6">
-        CityBuddy Turin · Local discovery MVP
+        {t.footer}
       </footer>
     </main>
   );

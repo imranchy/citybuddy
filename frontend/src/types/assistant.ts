@@ -14,6 +14,12 @@ export type DiscoveryIntent = {
   radius_km: number | null;
   wants_transport: boolean;
   language: string;
+  request_language?: string;
+  category_limits?: Record<string, number>;
+  preferences?: string[];
+  goal?: "recommend" | "describe" | "compare" | "itinerary" | "answer";
+  tool_intent?: string;
+  target_place_name?: string | null;
   unsupported_constraints: string[];
 };
 

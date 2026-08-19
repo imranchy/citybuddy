@@ -16,7 +16,7 @@ def main() -> None:
     arguments = parser.parse_args()
     dataset = json.loads(arguments.dataset.read_text(encoding="utf-8"))
     provider = OllamaEmbeddingProvider(
-        base_url=settings.ollama_base_url,
+        base_url=settings.ollama_embedding_base_url or settings.ollama_base_url,
         timeout_seconds=max(settings.ollama_timeout_seconds, 120),
     )
     report = evaluate_rag_dataset(provider, model=arguments.model, dataset=dataset)

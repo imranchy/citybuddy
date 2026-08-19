@@ -8,7 +8,7 @@ from app.llm.intent_evaluation import (
     evaluate_intent_model,
     intent_cases_for_suite,
 )
-from app.llm.schemas import DiscoveryIntent
+from app.llm.schemas import SemanticPlan
 
 
 class PassingIntentProvider:
@@ -20,21 +20,44 @@ class PassingIntentProvider:
         self.user_prompts.append(kwargs["user_prompt"])
         case = next(self.cases)
         if isinstance(case, CategoryIntentCase):
-            output = DiscoveryIntent(
-                categories=[case.category], language=case.language
-            )
+            categories = [{"category": case.category, "quantity": None}]
+            city = "turin"
+            nearby = False
+            radius_km = None
+            wants_transport = False
+            task_type = "discovery"
         else:
             assert isinstance(case, IntentCase)
-            output = DiscoveryIntent(
-                city=case.city,
-                categories=list(case.categories),
-                limit=case.limit,
-                nearby=case.nearby,
-                radius_km=case.radius_km,
-                wants_transport=case.wants_transport,
-                language=case.language,
-                unsupported_constraints=list(case.unsupported_constraints),
-            )
+            quantity = case.limit if len(case.categories) == 1 and case.limit != 5 else None
+            categories = [
+                {"category": category, "quantity": quantity}
+                for category in case.categories
+            ]
+            city = case.city
+            nearby = case.nearby
+            radius_km = case.radius_km
+            wants_transport = case.wants_transport
+            task_type = "official_opening" if case.key == "live_open" else "discovery"
+        output = SemanticPlan.model_validate(
+            {
+                "request_language": case.language,
+                "response_language": case.language,
+                "city": city,
+                "mode": "single",
+                "tasks": [
+                    {
+                        "task_type": task_type,
+                        "goal": "recommend",
+                        "query": case.query,
+                        "categories": categories,
+                        "preferences": [],
+                        "nearby": nearby,
+                        "radius_km": radius_km,
+                        "wants_transport": wants_transport,
+                    }
+                ],
+            }
+        )
         return LLMCallResult(
             output=output,
             model=kwargs["model"],
@@ -104,8 +127,8 @@ class IntentEvaluationTests(unittest.TestCase):
         first = json.loads(provider.user_prompts[0])
         italian = json.loads(provider.user_prompts[1])
         self.assertEqual(first["conversation_history"], [])
-        self.assertEqual(first["required_response_language"], "en")
-        self.assertEqual(italian["required_response_language"], "it")
+        self.assertEqual(first["ui_language"], "en")
+        self.assertEqual(italian["ui_language"], "it")
         self.assertIn("current_user_message", first)
 
     def test_provider_failures_are_reported_without_crashing(self) -> None:

@@ -18,15 +18,19 @@ router = APIRouter(prefix="/api/assistant", tags=["assistant"])
 @lru_cache
 def get_assistant_service() -> AssistantService:
     return AssistantService(
-        provider=OllamaProvider(
-            base_url=settings.ollama_base_url,
+        planner_provider=OllamaProvider(
+            base_url=settings.ollama_planner_base_url or settings.ollama_base_url,
             timeout_seconds=settings.ollama_timeout_seconds,
         ),
-        intent_model=settings.ollama_intent_model,
+        response_provider=OllamaProvider(
+            base_url=settings.ollama_response_base_url or settings.ollama_base_url,
+            timeout_seconds=settings.ollama_timeout_seconds,
+        ),
+        planner_model=settings.ollama_planner_model,
         response_model=settings.ollama_response_model,
         embedding_provider=(
             OllamaEmbeddingProvider(
-                base_url=settings.ollama_base_url,
+                base_url=settings.ollama_embedding_base_url or settings.ollama_base_url,
                 timeout_seconds=max(settings.ollama_timeout_seconds, 120),
             )
             if settings.rag_enabled

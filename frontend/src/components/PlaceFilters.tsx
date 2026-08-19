@@ -1,8 +1,11 @@
 "use client";
 
 import type { CategoryGroup } from "@/types/place";
+import type { Language } from "@/types/language";
+import { FILTER_COPY } from "@/lib/i18n";
 
 type PlaceFiltersProps = {
+  language: Language;
   categories: CategoryGroup[];
   category: string;
   cityInput: string;
@@ -15,6 +18,7 @@ type PlaceFiltersProps = {
 };
 
 export default function PlaceFilters({
+  language,
   categories,
   category,
   cityInput,
@@ -25,6 +29,7 @@ export default function PlaceFilters({
   onApply,
   onClear,
 }: PlaceFiltersProps) {
+  const t = FILTER_COPY[language];
   return (
     <form
       onSubmit={(event) => {
@@ -38,7 +43,7 @@ export default function PlaceFilters({
           htmlFor="category-filter"
           className="mb-2 block text-xs font-semibold uppercase tracking-[0.15em] text-[#A9B1D6]"
         >
-          Category
+          {t.category}
         </label>
 
         <select
@@ -49,7 +54,7 @@ export default function PlaceFilters({
           }
           className="min-h-12 w-full rounded-xl border border-white/10 bg-[#0B112B] px-4 text-[#FFF8E7] outline-none focus:border-[#FF6846]"
         >
-          <option value="">All categories</option>
+          <option value="">{t.allCategories}</option>
 
           {categories.map((group) => (
             <optgroup key={group.key} label={group.label}>
@@ -71,7 +76,7 @@ export default function PlaceFilters({
           htmlFor="city-filter"
           className="mb-2 block text-xs font-semibold uppercase tracking-[0.15em] text-[#A9B1D6]"
         >
-          City
+          {t.city}
         </label>
 
         <input
@@ -82,7 +87,7 @@ export default function PlaceFilters({
             onCityInputChange(event.target.value)
           }
           className="min-h-12 w-full rounded-xl border border-white/10 bg-[#0B112B] px-4 text-[#FFF8E7] outline-none placeholder:text-[#A9B1D6]/60 focus:border-[#FF6846]"
-          placeholder="Enter a city"
+          placeholder={t.enterCity}
         />
       </div>
 
@@ -91,7 +96,7 @@ export default function PlaceFilters({
           htmlFor="limit-filter"
           className="mb-2 block text-xs font-semibold uppercase tracking-[0.15em] text-[#A9B1D6]"
         >
-          Results per page
+          {t.results}
         </label>
 
         <select
@@ -113,7 +118,7 @@ export default function PlaceFilters({
           type="submit"
           className="min-h-12 flex-1 rounded-xl bg-[#FF6846] px-4 font-semibold text-[#070B24] transition hover:bg-[#FF826B]"
         >
-          Apply
+          {t.apply}
         </button>
 
         <button
@@ -121,7 +126,7 @@ export default function PlaceFilters({
           onClick={onClear}
           className="min-h-12 rounded-xl border border-white/10 px-4 text-sm text-[#A9B1D6] transition hover:border-[#FF6846]/50 hover:text-[#FFF8E7]"
         >
-          Clear
+          {t.clear}
         </button>
       </div>
     </form>

@@ -44,7 +44,7 @@ def main() -> None:
             print("Preview complete. No evidence or embeddings were changed.")
             return
         provider = OllamaEmbeddingProvider(
-            base_url=settings.ollama_base_url,
+            base_url=settings.ollama_embedding_base_url or settings.ollama_base_url,
             timeout_seconds=max(settings.ollama_timeout_seconds, 120),
         )
         indexed = index_evidence_candidates(

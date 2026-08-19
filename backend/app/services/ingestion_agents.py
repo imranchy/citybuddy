@@ -126,16 +126,28 @@ must not invent facts beyond the candidate metadata."""
 
 def build_review_graph(
     *,
-    provider: StructuredLLMProvider,
+    provider: StructuredLLMProvider | None = None,
+    qwen_provider: StructuredLLMProvider | None = None,
+    gemma_provider: StructuredLLMProvider | None = None,
     qwen_model: str,
     gemma_model: str,
 ):
-    """Build a bounded Qwen -> optional Gemma review graph.
+    """Build a bounded small-reviewer -> optional Gemma review graph.
+
+    ``qwen_provider`` and ``gemma_provider`` may point at separate inference endpoints
+    so background ingestion never has to compete with interactive traffic. The legacy
+    ``provider`` argument remains a compatibility shortcut for local single-endpoint
+    development.
 
     Deterministically valid and invalid candidates do not spend model tokens.
     Only review-required candidates enter model review. Agent output remains
     advisory and is finalized into a two-state approve/reject recommendation.
     """
+
+    qwen_provider = qwen_provider or provider
+    gemma_provider = gemma_provider or provider
+    if qwen_provider is None or gemma_provider is None:
+        raise ValueError("Provide provider, or both qwen_provider and gemma_provider.")
 
     def deterministic_gate(state: ReviewState) -> ReviewState:
         status = state["validation_status"]
@@ -186,7 +198,7 @@ def build_review_graph(
         return "done" if "result" in state else "qwen"
 
     def qwen_review(state: ReviewState) -> ReviewState:
-        call = provider.generate_structured(
+        call = qwen_provider.generate_structured(
             model=qwen_model,
             system_prompt=SYSTEM_PROMPT,
             user_prompt=_review_prompt(state),
@@ -224,7 +236,7 @@ def build_review_graph(
             + "\n\nCheaper reviewer escalation:\n"
             + qwen.model_dump_json()
         )
-        call = provider.generate_structured(
+        call = gemma_provider.generate_structured(
             model=gemma_model,
             system_prompt=GEMMA_SYSTEM_PROMPT,
             user_prompt=prompt,

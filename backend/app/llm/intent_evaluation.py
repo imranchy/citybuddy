@@ -7,11 +7,11 @@ from typing import Any
 
 from app.llm.base import StructuredLLMProvider
 from app.llm.evaluation import INTENT_CASES, IntentCase
-from app.llm.prompts import INTENT_SYSTEM_PROMPT
-from app.llm.schemas import DiscoveryIntent, RawDiscoveryIntent
+from app.llm.prompts import SEMANTIC_PLANNER_SYSTEM_PROMPT
+from app.llm.schemas import DiscoveryIntent, SemanticPlan
 from app.llm.tracing import TraceConfig, finish_trace, trace_evaluation_case
 from app.schemas.assistant import AssistantChatRequest
-from app.services.assistant import normalize_discovery_intent
+from app.services.assistant import _planned_task_intent
 
 
 @dataclass(frozen=True, slots=True)
@@ -102,41 +102,31 @@ def _p95(values: list[float]) -> float | None:
     return ordered[max(0, ceil(0.95 * len(ordered)) - 1)]
 
 
-def _raw_semantic_checks(
+def _plan_checks(
     case: IntentCase | CategoryIntentCase,
-    intent: RawDiscoveryIntent,
+    plan: SemanticPlan,
+    intent: DiscoveryIntent,
 ) -> dict[str, bool]:
     expected_categories = (
         [case.category]
         if isinstance(case, CategoryIntentCase)
         else list(case.categories)
     )
-    checks = {"categories": set(intent.categories) == set(expected_categories)}
-    if isinstance(case, IntentCase):
-        checks["wants_transport"] = intent.wants_transport == case.wants_transport
-    return checks
-
-
-def _normalized_checks(
-    case: IntentCase | CategoryIntentCase,
-    intent: DiscoveryIntent,
-) -> dict[str, bool]:
-    if isinstance(case, CategoryIntentCase):
-        return {
-            "categories": intent.categories == [case.category],
-            "language": intent.language == case.language,
-        }
-    return {
-        "categories": set(intent.categories) == set(case.categories),
+    checks = {
+        "categories": set(intent.categories) == set(expected_categories),
         "language": intent.language == case.language,
-        "city": intent.city == case.city,
-        "limit": intent.limit == case.limit,
-        "nearby": intent.nearby == case.nearby,
-        "radius_km": intent.radius_km == case.radius_km,
-        "wants_transport": intent.wants_transport == case.wants_transport,
-        "unsupported_constraints": set(intent.unsupported_constraints)
-        == set(case.unsupported_constraints),
     }
+    if isinstance(case, IntentCase):
+        checks.update(
+            {
+                "city": intent.city == case.city,
+                "limit": intent.limit == case.limit,
+                "nearby": intent.nearby == case.nearby,
+                "radius_km": intent.radius_km == case.radius_km,
+                "wants_transport": intent.wants_transport == case.wants_transport,
+            }
+        )
+    return checks
 
 
 def _error_kind(error: Exception) -> str:
@@ -185,36 +175,37 @@ def evaluate_intent_model(
             ) as trace:
                 call = provider.generate_structured(
                     model=model,
-                    system_prompt=INTENT_SYSTEM_PROMPT,
+                    system_prompt=SEMANTIC_PLANNER_SYSTEM_PROMPT,
                     user_prompt=json.dumps(
                         {
                             "conversation_history": [],
                             "current_user_message": case.query,
-                            "required_response_language": case.language,
+                            "ui_language": case.language,
+                            "supported_response_languages": ["en", "it", "pt", "de", "bn"],
                         },
                         ensure_ascii=False,
                     ),
-                    output_schema=RawDiscoveryIntent,
+                    output_schema=SemanticPlan,
                 )
-                raw_payload = (
+                plan_payload = (
                     call.output.model_dump()
                     if hasattr(call.output, "model_dump")
                     else call.output
                 )
-                raw_output = RawDiscoveryIntent.model_validate(raw_payload)
+                plan = SemanticPlan.model_validate(plan_payload)
+                if len(plan.tasks) != 1:
+                    raise ValueError("Intent evaluation cases require one planner task")
                 request = AssistantChatRequest(message=case.query, language=case.language)
-                normalized_output = normalize_discovery_intent(request, raw_output)
-                raw_checks = _raw_semantic_checks(case, raw_output)
-                checks = _normalized_checks(case, normalized_output)
+                normalized_output = _planned_task_intent(request, plan, plan.tasks[0])
+                checks = _plan_checks(case, plan, normalized_output)
 
                 result = {
                     "key": case.key,
                     "passed": all(checks.values()),
                     "response_received": True,
                     "schema_valid": True,
-                    "raw_checks": raw_checks,
                     "checks": checks,
-                    "raw_output": raw_output.model_dump(),
+                    "plan": plan.model_dump(),
                     "output": normalized_output.model_dump(),
                     "duration_ms": call.total_duration_ms,
                     "load_duration_ms": call.load_duration_ms,
@@ -243,11 +234,7 @@ def evaluate_intent_model(
         for result in case_results
         for passed in result.get("checks", {}).values()
     ]
-    raw_semantic_checks = [
-        passed
-        for result in case_results
-        for passed in result.get("raw_checks", {}).values()
-    ]
+    raw_semantic_checks = list(field_checks)
     warm_durations = durations[1:]
     error_counts = {
         kind: sum(result.get("error_kind") == kind for result in case_results)

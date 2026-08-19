@@ -5,31 +5,13 @@ import { FormEvent, useEffect, useRef, useState } from "react";
 import AssistantPlaceCard from "@/components/AssistantPlaceCard";
 import { sendAssistantMessage } from "@/lib/api";
 import type { AssistantChatResponse, ConversationMessage } from "@/types/assistant";
-import { LANGUAGE_OPTIONS, type Language } from "@/types/language";
+import type { Language } from "@/types/language";
+import { CHAT_COPY } from "@/lib/i18n";
 
 type SuggestedSearch = { label: string; query: string };
 type AssistantTurn = { id: number; question: string; language: Language; response: AssistantChatResponse };
 type UserLocation = { latitude: number; longitude: number };
-type Props = { suggestions: SuggestedSearch[]; isApiConnected: boolean };
-
-const copy = {
-  en: {
-    input: "Ask about museums, parks, food, nightlife or places nearby…",
-    send: "Send", thinking: "Thinking…", you: "You",
-    locate: "Use my location", locating: "Locating…", ready: "Location ready",
-    remove: "Remove location", reset: "New conversation", empty: "Tell CityBuddy what you would like to discover.",
-    offline: "CityBuddy is offline. Start the backend and try again.", failure: "I could not complete that request. Please try again.",
-    locationUsed: "Location is ready for nearby searches.", locationFailed: "Location permission was unavailable.",
-  },
-  it: {
-    input: "Chiedi di musei, parchi, ristoranti, vita notturna o luoghi vicini…",
-    send: "Invia", thinking: "Sto cercando…", you: "Tu",
-    locate: "Usa la mia posizione", locating: "Localizzazione…", ready: "Posizione pronta",
-    remove: "Rimuovi posizione", reset: "Nuova conversazione", empty: "Racconta a CityBuddy cosa vorresti scoprire.",
-    offline: "CityBuddy non è disponibile. Avvia il backend e riprova.", failure: "Non sono riuscito a completare la richiesta. Riprova.",
-    locationUsed: "La posizione è pronta per le ricerche nelle vicinanze.", locationFailed: "Non è stato possibile accedere alla posizione.",
-  },
-} as const;
+type Props = { suggestions: SuggestedSearch[]; isApiConnected: boolean; language: Language };
 
 function history(turns: AssistantTurn[]): ConversationMessage[] {
   return turns.flatMap((turn) => [
@@ -38,8 +20,7 @@ function history(turns: AssistantTurn[]): ConversationMessage[] {
   ]).slice(-10);
 }
 
-export default function AssistantChat({ suggestions, isApiConnected }: Props) {
-  const [language, setLanguage] = useState<Language>("en");
+export default function AssistantChat({ suggestions, isApiConnected, language }: Props) {
   const [query, setQuery] = useState("");
   const [turns, setTurns] = useState<AssistantTurn[]>([]);
   const [isSending, setIsSending] = useState(false);
@@ -49,9 +30,7 @@ export default function AssistantChat({ suggestions, isApiConnected }: Props) {
   const nextId = useRef(1);
   const controller = useRef<AbortController | null>(null);
   const transcript = useRef<HTMLDivElement | null>(null);
-  // The selector controls assistant output language. UI chrome stays on the
-  // existing English/Italian localization until broader UI localization is added.
-  const t = copy[language === "it" ? "it" : "en"];
+  const t = CHAT_COPY[language];
 
   useEffect(() => () => controller.current?.abort(), []);
   useEffect(() => {
@@ -75,7 +54,10 @@ export default function AssistantChat({ suggestions, isApiConnected }: Props) {
         context_place_ids: previousIds,
         ...(location ? location : {}),
       }, active.signal);
-      setTurns((current) => [...current, { id: nextId.current++, question, language, response }]);
+            const responseLanguage = (["en", "it", "pt", "de", "bn"] as const).includes(
+        response.intent.language as Language,
+      ) ? (response.intent.language as Language) : language;
+      setTurns((current) => [...current, { id: nextId.current++, question, language: responseLanguage, response }]);
       setQuery("");
     } catch (error) {
       if (!(error instanceof Error && error.name === "AbortError")) setMessage(t.failure);
@@ -104,7 +86,6 @@ export default function AssistantChat({ suggestions, isApiConnected }: Props) {
         <button disabled={isSending || !isApiConnected} className="rounded-xl bg-[#FF6846] px-5 font-semibold text-[#070B24] disabled:opacity-50">{isSending ? t.thinking : t.send}</button>
       </div>
       <div className="mt-2 flex flex-wrap items-center gap-2">
-        <select aria-label="Language" value={language} onChange={(event) => setLanguage(event.target.value as Language)} className="rounded-full border border-white/10 bg-[#0B112B] px-3 py-2 text-xs text-[#FFF8E7]">{LANGUAGE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select>
         <button type="button" onClick={locate} disabled={isLocating} className="rounded-full border border-[#FFC83D]/30 px-3 py-2 text-xs text-[#FFC83D]">{isLocating ? t.locating : location ? t.ready : t.locate}</button>
         {location && <button type="button" onClick={() => setLocation(null)} className="rounded-full border border-white/10 px-3 py-2 text-xs text-[#A9B1D6]">{t.remove}</button>}
         {turns.length > 0 && <button type="button" onClick={() => { setTurns([]); setQuery(""); setMessage(""); }} className="ml-auto rounded-full border border-white/10 px-3 py-2 text-xs text-[#A9B1D6]">{t.reset}</button>}

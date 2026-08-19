@@ -13,9 +13,13 @@ export default function AssistantPlaceCard({ recommendation, language }: Props) 
   const { place } = recommendation;
   const image = place.primary_image;
   const imageUrl = image?.thumbnail_url ?? image?.image_url;
-  const labels = language === "it"
-    ? { why: "Perché è adatto", map: "Apri in Maps", transit: "Mezzi pubblici", details: "Altri dettagli" }
-    : { why: "Why it matches", map: "Open in Maps", transit: "Public transport", details: "More details" };
+  const labels = {
+    en: { why: "Why it matches", map: "Open in Maps", transit: "Public transport", details: "More details" },
+    it: { why: "Perché è adatto", map: "Apri in Maps", transit: "Mezzi pubblici", details: "Altri dettagli" },
+    pt: { why: "Por que combina", map: "Abrir no Maps", transit: "Transporte público", details: "Mais detalhes" },
+    de: { why: "Warum es passt", map: "In Maps öffnen", transit: "Öffentliche Verkehrsmittel", details: "Mehr Details" },
+    bn: { why: "কেন এটি মানানসই", map: "Maps-এ খুলুন", transit: "গণপরিবহন", details: "আরও তথ্য" },
+  }[language];
 
   return (
     <article className="overflow-hidden rounded-2xl border border-white/10 bg-[#0B112B]/70">

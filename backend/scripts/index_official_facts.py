@@ -47,7 +47,7 @@ def require_reviewed_place(database, *, place_id: int | None, city: str) -> None
 def main() -> None:
     arguments = parse_arguments()
     provider = OllamaProvider(
-        base_url=settings.ollama_base_url,
+        base_url=settings.ollama_ingestion_base_url or settings.ollama_base_url,
         timeout_seconds=max(settings.ollama_timeout_seconds, 120),
     )
     database = SessionLocal()
@@ -57,7 +57,7 @@ def main() -> None:
             database,
             city=arguments.city,
             provider=provider,
-            model=settings.ollama_intent_model,
+            model=settings.ollama_ingestion_model,
             place_limit=arguments.place_limit,
             place_id=arguments.place_id,
         )

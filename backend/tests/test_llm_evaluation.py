@@ -8,7 +8,7 @@ from app.llm.evaluation import (
     _error_kind,
     evaluate_model,
 )
-from app.llm.schemas import DiscoveryIntent, GroundedResponse
+from app.llm.schemas import GroundedResponse, SemanticPlan
 
 
 class PassingProvider:
@@ -23,17 +23,31 @@ class PassingProvider:
         user_prompt,
         output_schema,
     ) -> LLMCallResult:
-        if output_schema is DiscoveryIntent:
+        if output_schema is SemanticPlan:
             case = INTENT_CASES[self.call_index]
-            output = DiscoveryIntent(
-                city=case.city,
-                categories=list(case.categories),
-                limit=case.limit,
-                nearby=case.nearby,
-                radius_km=case.radius_km,
-                wants_transport=case.wants_transport,
-                language=case.language,
-                unsupported_constraints=list(case.unsupported_constraints),
+            quantity = case.limit if len(case.categories) == 1 and case.limit != 5 else None
+            output = SemanticPlan.model_validate(
+                {
+                    "request_language": case.language,
+                    "response_language": case.language,
+                    "city": case.city,
+                    "mode": "single",
+                    "tasks": [
+                        {
+                            "task_type": "official_opening" if case.key == "live_open" else "discovery",
+                            "goal": "recommend",
+                            "query": case.query,
+                            "categories": [
+                                {"category": category, "quantity": quantity}
+                                for category in case.categories
+                            ],
+                            "preferences": [],
+                            "nearby": case.nearby,
+                            "radius_km": case.radius_km,
+                            "wants_transport": case.wants_transport,
+                        }
+                    ],
+                }
             )
         else:
             grounding_index = self.call_index - len(INTENT_CASES)

@@ -8,11 +8,14 @@ import {
   getPlaces,
 } from "@/lib/api";
 import type { CategoryGroup, Place } from "@/types/place";
+import type { Language } from "@/types/language";
+import { DISCOVERY_STATUS_COPY } from "@/lib/i18n";
 
-export default function usePlacesDiscovery() {
+export default function usePlacesDiscovery(language: Language) {
+  const t = DISCOVERY_STATUS_COPY[language];
   const [places, setPlaces] = useState<Place[]>([]);
   const [placesStatus, setPlacesStatus] =
-    useState("Loading places...");
+    useState(DISCOVERY_STATUS_COPY.en.loading);
   const [category, setCategory] = useState("");
   const [categories, setCategories] = useState<CategoryGroup[]>([]);
   const [cityInput, setCityInput] = useState("Torino");
@@ -57,7 +60,7 @@ export default function usePlacesDiscovery() {
 
     async function loadPlaces() {
       setIsLoadingPlaces(true);
-      setPlacesStatus("Loading places...");
+      setPlacesStatus(t.loading);
 
       try {
         const data = userLocation
@@ -83,9 +86,7 @@ export default function usePlacesDiscovery() {
 
         setPlaces(data);
         setPlacesStatus(
-          data.length === 1
-            ? "1 place loaded"
-            : `${data.length} places loaded`,
+          data.length === 1 ? t.one : t.many(data.length),
         );
       } catch (error) {
         if (
@@ -96,7 +97,7 @@ export default function usePlacesDiscovery() {
         }
 
         setPlaces([]);
-        setPlacesStatus("Places are temporarily unavailable");
+        setPlacesStatus(t.unavailable);
       } finally {
         if (!controller.signal.aborted) {
           setIsLoadingPlaces(false);
@@ -114,18 +115,18 @@ export default function usePlacesDiscovery() {
     offset,
     radiusKm,
     userLocation,
+    language,
+    t,
   ]);
 
   function handleUseLocation() {
     if (!navigator.geolocation) {
-      setLocationStatus(
-        "Location services are not supported by this browser.",
-      );
+      setLocationStatus(t.unsupportedLocation);
       return;
     }
 
     setIsLocating(true);
-    setLocationStatus("Requesting your location...");
+    setLocationStatus(t.requestingLocation);
 
     navigator.geolocation.getCurrentPosition(
       (position) => {
@@ -135,15 +136,11 @@ export default function usePlacesDiscovery() {
         });
         setOffset(0);
         setIsLocating(false);
-        setLocationStatus(
-          `Showing places within ${radiusKm} km of you.`,
-        );
+        setLocationStatus(t.within(radiusKm));
       },
       () => {
         setIsLocating(false);
-        setLocationStatus(
-          "Unable to access your location. Check browser permission.",
-        );
+        setLocationStatus(t.locationDenied);
       },
       {
         enableHighAccuracy: true,

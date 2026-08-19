@@ -5,7 +5,7 @@ from app.core.languages import (
     SUPPORTED_LANGUAGE_CODES,
     fallback_text,
 )
-from app.llm.prompts import ASSISTANT_RESPONSE_SYSTEM_PROMPT, INTENT_SYSTEM_PROMPT
+from app.llm.prompts import ASSISTANT_RESPONSE_SYSTEM_PROMPT, SEMANTIC_PLANNER_SYSTEM_PROMPT
 from app.schemas.assistant import AssistantChatRequest
 
 
@@ -27,11 +27,13 @@ class LanguageConfigurationTests(unittest.TestCase):
             self.assertTrue(fallback_text(language, "one_place"))
             self.assertTrue(fallback_text(language, "transit_disclaimer"))
 
-    def test_prompts_make_selected_language_authoritative(self) -> None:
+    def test_prompts_define_dynamic_response_language_hierarchy(self) -> None:
         for language in SUPPORTED_LANGUAGE_CODES:
-            self.assertIn(language, INTENT_SYSTEM_PROMPT)
-        self.assertIn("application-owned and authoritative", ASSISTANT_RESPONSE_SYSTEM_PROMPT)
-        self.assertIn("only in that language", ASSISTANT_RESPONSE_SYSTEM_PROMPT)
+            self.assertIn(language, SEMANTIC_PLANNER_SYSTEM_PROMPT)
+        self.assertIn("explicit response-language instruction", SEMANTIC_PLANNER_SYSTEM_PROMPT)
+        self.assertIn("current message's language", SEMANTIC_PLANNER_SYSTEM_PROMPT)
+        self.assertIn("ui_language", SEMANTIC_PLANNER_SYSTEM_PROMPT)
+        self.assertIn("validated response language comes from the Qwen semantic plan", ASSISTANT_RESPONSE_SYSTEM_PROMPT)
 
 
 if __name__ == "__main__":

@@ -435,3 +435,16 @@ and extractor model provenance. Unknown facts are omitted rather than guessed.
 Current fact vocabulary is intentionally small: wheelchair accessibility, accessible toilets,
 parking, family facilities, vegetarian options, vegan options, and explicit halal status.
 Volatile facts remain on the live official-site retrieval path.
+
+## Background model isolation
+
+Background semantic review can use a smaller model and a separate inference endpoint so a
+daily refresh does not contend with interactive Gemma requests. Configure
+`OLLAMA_INGESTION_MODEL` (default `qwen3:4b`) and `OLLAMA_INGESTION_BASE_URL`. Embedding
+jobs may likewise use `OLLAMA_EMBEDDING_BASE_URL`. When unset, all roles remain compatible
+with the existing local Ollama base URL.
+
+Deterministic validation remains the first ingestion stage. The small ingestion model is used
+only for bounded semantic classification/extraction, with the configured response model as an
+optional escalation path where the existing review graph permits it. Promotion remains
+application-owned and provenance-preserving.

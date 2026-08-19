@@ -173,13 +173,18 @@ def main() -> None:
         if arguments.timeout_seconds is not None
         else max(settings.ollama_timeout_seconds, 90.0)
     )
-    provider = OllamaProvider(
+    ingestion_provider = OllamaProvider(
+        base_url=settings.ollama_ingestion_base_url or settings.ollama_base_url,
+        timeout_seconds=review_timeout,
+    )
+    response_provider = OllamaProvider(
         base_url=settings.ollama_base_url,
         timeout_seconds=review_timeout,
     )
     graph = build_review_graph(
-        provider=provider,
-        qwen_model=settings.ollama_intent_model,
+        qwen_provider=ingestion_provider,
+        gemma_provider=response_provider,
+        qwen_model=settings.ollama_ingestion_model,
         gemma_model=settings.ollama_response_model,
     )
     counts: Counter[str] = Counter()

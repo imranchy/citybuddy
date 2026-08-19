@@ -1,31 +1,28 @@
 import unittest
 from datetime import datetime, timezone
 
-from app.core.maps import GOOGLE_MAPS_TRANSIT_DISCLAIMER
-from app.core.place_catalog import CATEGORY_DEFINITIONS
 from app.llm.base import LLMCallResult
 from app.llm.schemas import (
-    DiscoveryIntent,
     GroundedResponse,
-    RawDiscoveryIntent,
+    PlanSynthesisResponse,
+    SemanticPlan,
     ToolGroundedResponse,
 )
 from app.schemas.assistant import AssistantChatRequest
 from app.schemas.place import PlaceRead
-from app.services.assistant import AssistantService, normalize_discovery_intent
-from app.services.place_types import RetrievedPlace
-from app.services.rag import RetrievedEvidence
+from app.services.assistant import AssistantService
 from app.services.official_site import OfficialSiteEvidence
+from app.services.place_types import RetrievedPlace
 from app.services.weather import WeatherForecast, WeatherPoint
 
 
-def place(place_id: int = 10, *, name: str = "Museo Test", category: str = "museum") -> RetrievedPlace:
+def place(place_id=10, name="Museo Test", category="museum"):
     return RetrievedPlace(
         place=PlaceRead(
             id=place_id,
             name=name,
             category=category,
-            description="A reviewed cinema collection.",
+            description=f"Reviewed {category} in Turin.",
             address="Via Test 1",
             city="Torino",
             country_code="IT",
@@ -42,7 +39,60 @@ def place(place_id: int = 10, *, name: str = "Museo Test", category: str = "muse
     )
 
 
-def result(output, model="fake") -> LLMCallResult:
+def plan(*, language="en", city="turin", tasks, mode="single", continuation=False):
+    return SemanticPlan.model_validate(
+        {
+            "request_language": language,
+            "response_language": language,
+            "city": city,
+            "is_continuation": continuation,
+            "mode": mode,
+            "tasks": tasks,
+        }
+    )
+
+
+def discovery_task(*, query, category="museum", quantity=1, **updates):
+    task = {
+        "task_type": "discovery",
+        "goal": "recommend",
+        "query": query,
+        "categories": [] if category is None else [{"category": category, "quantity": quantity}],
+        "preferences": [],
+        "refers_to_context": False,
+        "nearby": False,
+        "wants_transport": False,
+        "forecast_hours": 12,
+    }
+    task.update(updates)
+    return task
+
+
+def grounded(place_ids, summary="Here are grounded recommendations."):
+    return GroundedResponse.model_validate(
+        {
+            "recommendations": [
+                {"place_id": place_id, "reason": "A grounded choice.", "evidence_ids": []}
+                for place_id in place_ids
+            ],
+            "claims": [],
+            "abstained": False,
+            "summary": summary,
+        }
+    )
+
+
+def tool_answer(answer, *, field=None, value=None, abstained=False):
+    return ToolGroundedResponse.model_validate(
+        {
+            "answer": answer,
+            "claims": [] if field is None else [{"field": field, "value": value}],
+            "abstained": abstained,
+        }
+    )
+
+
+def result(output, model="fake"):
     return LLMCallResult(
         output=output,
         model=model,
@@ -54,31 +104,42 @@ def result(output, model="fake") -> LLMCallResult:
     )
 
 
-class SequenceProvider:
-    def __init__(self, outputs) -> None:
+class QueueProvider:
+    def __init__(self, outputs):
         self.outputs = list(outputs)
-        self.models = []
+        self.calls = []
 
-    def generate_structured(self, **kwargs) -> LLMCallResult:
-        self.models.append(kwargs["model"])
+    def generate_structured(self, **kwargs):
+        self.calls.append(kwargs)
         output = self.outputs.pop(0)
         if isinstance(output, Exception):
             raise output
-        return result(output)
+        return result(output, kwargs["model"])
 
 
-class RecordingRetriever:
-    def __init__(self, places=None) -> None:
-        self.places = list(places or [])
+class SmartRetriever:
+    def __init__(self, places):
+        self.places = list(places)
         self.calls = []
 
     def __call__(self, database, **kwargs):
         self.calls.append(kwargs)
-        return self.places
+        rows = self.places
+        categories = kwargs.get("categories") or []
+        if categories:
+            rows = [item for item in rows if item.place.category in categories]
+        place_ids = kwargs.get("place_ids")
+        if place_ids:
+            rows = [item for item in rows if item.place.id in place_ids]
+        name_query = kwargs.get("name_query")
+        if name_query:
+            q = name_query.casefold()
+            rows = [item for item in rows if q in item.place.name.casefold()]
+        return rows[: kwargs.get("limit", 5)]
 
 
 class FakeEmbeddingProvider:
-    def __init__(self) -> None:
+    def __init__(self):
         self.calls = []
 
     def embed(self, *, model, texts):
@@ -86,37 +147,7 @@ class FakeEmbeddingProvider:
         return [[0.1, 0.2] for _ in texts]
 
 
-def intent(**updates) -> DiscoveryIntent:
-    values = {
-        "city": "turin",
-        "categories": ["museum"],
-        "limit": 5,
-        "nearby": False,
-        "radius_km": None,
-        "wants_transport": False,
-        "language": "en",
-        "unsupported_constraints": [],
-    }
-    values.update(updates)
-    return DiscoveryIntent.model_validate(values)
-
-
-
-
-def tool_answer(
-    answer: str,
-    *,
-    field: str | None = None,
-    value=None,
-    abstained: bool = False,
-) -> ToolGroundedResponse:
-    claims = [] if field is None else [{"field": field, "value": value}]
-    return ToolGroundedResponse.model_validate(
-        {"answer": answer, "claims": claims, "abstained": abstained}
-    )
-
-
-def weather_forecast() -> WeatherForecast:
+def weather_forecast():
     now = datetime(2026, 8, 19, 9, 0, tzinfo=timezone.utc)
     return WeatherForecast(
         city="Torino",
@@ -141,1345 +172,221 @@ def weather_forecast() -> WeatherForecast:
     )
 
 
-def official_evidence(*, verified: bool = True) -> OfficialSiteEvidence:
+def official_evidence(page_type="menu", verified=True):
     return OfficialSiteEvidence(
         place_id=10,
         place_name="Museo Test",
-        page_type="opening_info",
+        page_type=page_type,
         official_host="example.org",
-        source_url="https://example.org/visit",
+        source_url="https://example.org/menu",
         fetched_at=datetime(2026, 8, 19, 9, 0, tzinfo=timezone.utc),
         verified=verified,
         reason=None if verified else "no_readable_static_content",
-        title="Visit",
-        text="Open Tuesday to Sunday from 10:00 to 18:00." if verified else None,
+        title="Official information",
+        text="Lunch menu: pasta and salad." if verified else None,
         truncated=False,
-    )
-
-def grounded(
-    place_id: int = 10,
-    *,
-    reason: str = "A museum.",
-    summary: str = "A museum recommendation.",
-) -> GroundedResponse:
-    return GroundedResponse.model_validate(
-        {
-            "recommendations": [
-                {"place_id": place_id, "reason": reason}
-            ],
-            "claims": [
-                {"place_id": place_id, "field": "category", "value": "museum"}
-            ],
-            "abstained": False,
-            "summary": summary,
-        }
     )
 
 
 class AssistantServiceTests(unittest.TestCase):
-
-    def test_raw_intent_repairs_translated_category_and_text_radius(self) -> None:
-        raw_intent = RawDiscoveryIntent(
-            categories=["parco"],
-            nearby=False,
-            radius_km=0,
-            language="it",
-        )
-        retriever = RecordingRetriever([])
-        service = AssistantService(
-            provider=SequenceProvider([raw_intent]),
-            model="fake",
-            retriever=retriever,
+    def service(self, planner_outputs, response_outputs, *, retriever=None, **kwargs):
+        return AssistantService(
+            planner_provider=QueueProvider(planner_outputs),
+            response_provider=QueueProvider(response_outputs),
+            planner_model="qwen-test",
+            response_model="gemma-test",
+            retriever=retriever or SmartRetriever([place()]),
+            **kwargs,
         )
 
-        response = service.respond(
-            object(),
-            AssistantChatRequest(
-                message="Trova un parco vicino a me entro 2 km",
-                language="it",
-                latitude=45.0703,
-                longitude=7.6869,
-            ),
+    def test_qwen_plan_owns_german_quantity(self):
+        p = plan(language="de", tasks=[discovery_task(query="Empfiehl mir zwei Museen", quantity=2)])
+        retriever = SmartRetriever([place(10), place(11, "Museum Zwei")])
+        response = self.service([p], [grounded([10, 11], "Zwei Museen.")], retriever=retriever).respond(
+            object(), AssistantChatRequest(message="Empfiehl mir zwei Museen", language="en")
         )
+        self.assertEqual(response.intent.language, "de")
+        self.assertEqual(response.intent.limit, 2)
+        self.assertEqual(len(response.recommendations), 2)
 
-        self.assertEqual(response.intent.categories, ["park"])
-        self.assertTrue(response.intent.nearby)
-        self.assertEqual(response.intent.radius_km, 2.0)
-        self.assertEqual(retriever.calls[0]["categories"], ["park"])
-        self.assertEqual(retriever.calls[0]["radius_km"], 2.0)
-
-    def test_italian_explicit_count_is_application_owned(self) -> None:
-        raw_intent = RawDiscoveryIntent(categories=["museo"], limit=9, language="it")
-        service = AssistantService(
-            provider=SequenceProvider([raw_intent]),
-            model="fake",
-            retriever=RecordingRetriever([]),
+    def test_qwen_plan_owns_bangla_quantity(self):
+        p = plan(language="bn", tasks=[discovery_task(query="দুটি জাদুঘর দেখাও", quantity=2)])
+        retriever = SmartRetriever([place(10), place(11, "Museum Zwei")])
+        response = self.service([p], [grounded([10, 11], "দুটি জাদুঘর।")], retriever=retriever).respond(
+            object(), AssistantChatRequest(message="দুটি জাদুঘর দেখাও", language="en")
         )
-
-        response = service.respond(
-            object(),
-            AssistantChatRequest(
-                message="Consigliami due musei a Torino",
-                language="it",
-            ),
-        )
-
-        self.assertEqual(response.intent.categories, ["museum"])
+        self.assertEqual(response.intent.language, "bn")
         self.assertEqual(response.intent.limit, 2)
 
-    def test_italian_public_transport_fallback_phrase_is_detected(self) -> None:
-        service = AssistantService(
-            provider=SequenceProvider([RawDiscoveryIntent(categories=["museum"], language="it"), grounded()]),
-            model="fake",
-            retriever=RecordingRetriever([place()]),
+    def test_current_message_language_overrides_page_default(self):
+        p = plan(language="de", tasks=[discovery_task(query="Ein Museum", quantity=1)])
+        response = self.service([p], [grounded([10], "Ein Museum.")]).respond(
+            object(), AssistantChatRequest(message="Ein Museum", language="it")
         )
+        self.assertEqual(response.intent.language, "de")
 
-        response = service.respond(
-            object(),
-            AssistantChatRequest(
-                message="Consigliami un museo e dimmi come raggiungerlo con i mezzi pubblici",
-                language="it",
-            ),
+    def test_explicit_response_language_is_planner_owned(self):
+        p = plan(language="en", tasks=[discovery_task(query="Answer in English. Zwei Museen", quantity=2)])
+        retriever = SmartRetriever([place(10), place(11, "Museum Zwei")])
+        response = self.service([p], [grounded([10, 11], "Two museums.")], retriever=retriever).respond(
+            object(), AssistantChatRequest(message="Answer in English. Zwei Museen", language="de")
         )
+        self.assertEqual(response.intent.language, "en")
+        self.assertEqual(response.intent.limit, 2)
 
-        self.assertTrue(response.intent.wants_transport)
-        self.assertIn("live_transport", response.intent.unsupported_constraints)
-        self.assertIsNotNone(response.recommendations[0].transit_url)
-
-    def test_transport_semantics_can_come_from_intent_model(self) -> None:
-        raw_intent = RawDiscoveryIntent(
-            categories=["museum"],
-            wants_transport=True,
-            language="it",
+    def test_multi_category_quantities_are_executed_independently(self):
+        task = discovery_task(query="Two museums and one park", category=None)
+        task["categories"] = [
+            {"category": "museum", "quantity": 2},
+            {"category": "park", "quantity": 1},
+        ]
+        p = plan(tasks=[task])
+        retriever = SmartRetriever([place(10), place(11, "Museum Zwei"), place(20, "Parco Test", "park")])
+        response = self.service([p], [grounded([10, 11, 20])], retriever=retriever).respond(
+            object(), AssistantChatRequest(message="Two museums and one park")
         )
-        service = AssistantService(
-            provider=SequenceProvider([raw_intent, grounded()]),
-            model="fake",
-            retriever=RecordingRetriever([place()]),
-        )
+        self.assertEqual(response.intent.category_limits, {"museum": 2, "park": 1})
+        self.assertEqual([r.place.category for r in response.recommendations], ["museum", "museum", "park"])
 
-        response = service.respond(
-            object(),
-            AssistantChatRequest(
-                message="Consigliami un museo e spiegami il modo migliore per arrivarci",
-                language="it",
-            ),
-        )
-
-        self.assertTrue(response.intent.wants_transport)
-        self.assertIn("live_transport", response.intent.unsupported_constraints)
-        self.assertIsNotNone(response.recommendations[0].transit_url)
-
-    def test_italian_context_reference_has_deterministic_fallback(self) -> None:
-        provider = SequenceProvider([RawDiscoveryIntent(language="it"), grounded()])
-        retriever = RecordingRetriever([place()])
-        service = AssistantService(
-            provider=provider,
-            model="fake",
-            retriever=retriever,
-        )
-
-        service.respond(
-            object(),
-            AssistantChatRequest(
-                message="Quale dei due mi consigli?",
-                language="it",
-                context_place_ids=[10, 11],
-            ),
-        )
-
-        self.assertEqual(retriever.calls[0]["place_ids"], [10, 11])
-
-    def test_model_can_mark_multilingual_context_follow_up(self) -> None:
-        provider = SequenceProvider([
-            RawDiscoveryIntent(refers_to_context=True, language="it"),
-            grounded(),
-        ])
-        retriever = RecordingRetriever([place()])
-        service = AssistantService(
-            provider=provider,
-            model="fake",
-            retriever=retriever,
-        )
-
-        service.respond(
-            object(),
-            AssistantChatRequest(
-                message="Quale dei due mi consigli?",
-                language="it",
-                context_place_ids=[10, 11],
-            ),
-        )
-
-        self.assertEqual(retriever.calls[0]["place_ids"], [10, 11])
-
-    def test_explicit_category_overrides_spurious_model_categories(self) -> None:
-        retriever = RecordingRetriever([place()])
-        service = AssistantService(
-            provider=SequenceProvider([
-                RawDiscoveryIntent(categories=["museum", "restaurant", "hotel"]),
-                grounded(),
-            ]),
-            model="fake",
-            retriever=retriever,
-        )
-
-        response = service.respond(
-            object(),
-            AssistantChatRequest(message="Recommend three museums in Turin."),
-        )
-
-        self.assertEqual(response.intent.categories, ["museum"])
-        self.assertEqual(retriever.calls[0]["categories"], ["museum"])
-
-    def test_supported_city_name_is_never_a_named_place_target(self) -> None:
-        retriever = RecordingRetriever([place()])
-        service = AssistantService(
-            provider=SequenceProvider([
-                RawDiscoveryIntent(
-                    categories=["museum", "restaurant", "hotel"],
-                    target_place_name="Turin",
-                ),
-                grounded(),
-            ]),
-            model="fake",
-            retriever=retriever,
-        )
-
-        response = service.respond(
-            object(),
-            AssistantChatRequest(message="Recommend three museums in Turin."),
-        )
-
-        self.assertEqual(response.intent.categories, ["museum"])
-        self.assertIsNone(response.intent.target_place_name)
-        self.assertEqual(retriever.calls[0]["categories"], ["museum"])
-        self.assertIsNone(retriever.calls[0]["name_query"])
-
-    def test_every_explicit_catalog_category_is_application_authoritative(self) -> None:
-        for definition in CATEGORY_DEFINITIONS:
-            with self.subTest(category=definition.key):
-                extra = "restaurant" if definition.key != "restaurant" else "hotel"
-                normalized = normalize_discovery_intent(
-                    AssistantChatRequest(
-                        message=f"Recommend {definition.label}s in Turin."
-                    ),
-                    RawDiscoveryIntent(categories=[definition.key, extra]),
-                )
-                self.assertEqual(normalized.categories, [definition.key])
-
-    def test_simple_explicit_category_skips_query_embedding(self) -> None:
+    def test_preferences_trigger_semantic_embedding(self):
+        task = discovery_task(query="A quiet museum", quantity=1, preferences=["quiet", "indoors"])
+        p = plan(tasks=[task])
         embeddings = FakeEmbeddingProvider()
-        service = AssistantService(
-            provider=SequenceProvider([RawDiscoveryIntent(categories=["museum"]), grounded()]),
-            model="fake",
-            retriever=RecordingRetriever([place()]),
-            embedding_provider=embeddings,
+        service = self.service(
+            [p], [grounded([10])], embedding_provider=embeddings,
+            evidence_retriever=lambda database, **kwargs: [],
         )
-
-        service.respond(
-            object(),
-            AssistantChatRequest(message="Recommend one museum in Turin"),
-        )
-
-        self.assertEqual(embeddings.calls, [])
-
-    def test_semantic_preference_requests_query_embedding(self) -> None:
-        embeddings = FakeEmbeddingProvider()
-        evidence = RetrievedEvidence(
-            id=31,
-            place_id=10,
-            title="Museo Test",
-            content="A reviewed cinema collection.",
-            source_type="citybuddy_place",
-            source_url=None,
-            attribution=None,
-            license=None,
-            similarity=0.9,
-        )
-        service = AssistantService(
-            provider=SequenceProvider([
-                RawDiscoveryIntent(
-                    categories=["museum"],
-                    needs_semantic_retrieval=True,
-                ),
-                grounded(),
-            ]),
-            model="fake",
-            retriever=RecordingRetriever([place()]),
-            embedding_provider=embeddings,
-            evidence_retriever=lambda database, **kwargs: [evidence],
-        )
-
-        service.respond(
-            object(),
-            AssistantChatRequest(message="Recommend one museum for a cinema fan"),
-        )
-
+        service.respond(object(), AssistantChatRequest(message="A quiet museum"))
         self.assertEqual(len(embeddings.calls), 1)
-
-    def test_spurious_model_constraints_are_removed_deterministically(self) -> None:
-        noisy_intent = intent(
-            limit=1,
-            nearby=True,
-            unsupported_constraints=[
-                "live_transport",
-                "live_opening_status",
-                "live_availability",
-                "unverified_price",
-                "unverified_rating",
-                "unsupported_city",
-            ],
-        )
-        service = AssistantService(
-            provider=SequenceProvider([noisy_intent, grounded()]),
-            model="fake",
-            retriever=RecordingRetriever([place()]),
-        )
-
-        response = service.respond(
-            object(), AssistantChatRequest(message="Recommend museums in Turin")
-        )
-
-        self.assertEqual(response.intent.unsupported_constraints, [])
-        self.assertFalse(response.intent.wants_transport)
-        self.assertFalse(response.intent.nearby)
-        self.assertEqual(response.intent.limit, 5)
-        self.assertEqual(response.warnings, [])
-
-    def test_explicit_safety_constraints_are_derived_from_the_message(self) -> None:
-        service = AssistantService(
-            provider=SequenceProvider([intent(unsupported_constraints=[]), grounded()]),
-            model="fake",
-            retriever=RecordingRetriever([place()]),
-        )
-
-        response = service.respond(
-            object(),
-            AssistantChatRequest(
-                message=(
-                    "Recommend one museum that is Michelin-starred and open right now, and tell "
-                    "me how to reach it by public transport"
-                )
-            ),
-        )
-
-        self.assertEqual(
-            response.intent.unsupported_constraints,
-            ["live_transport", "live_opening_status", "unverified_rating"],
-        )
-        self.assertTrue(response.intent.wants_transport)
-        self.assertEqual(response.intent.limit, 1)
-
-    def test_routes_intent_and_grounding_to_separate_models(self) -> None:
-        provider = SequenceProvider([intent(limit=1), grounded()])
-        service = AssistantService(
-            provider=provider,
-            intent_model="small-intent-model",
-            response_model="large-response-model",
-            retriever=RecordingRetriever([place()]),
-        )
-
-        response = service.respond(
-            object(), AssistantChatRequest(message="Recommend one museum")
-        )
-
-        self.assertEqual(response.provider_status, "available")
-        self.assertEqual(
-            provider.models, ["small-intent-model", "large-response-model"]
-        )
-
-    def test_response_model_recovers_failed_intent_model(self) -> None:
-        provider = SequenceProvider(
-            [RuntimeError("bad"), RuntimeError("bad"), intent(limit=1), grounded()]
-        )
-        service = AssistantService(
-            provider=provider,
-            intent_model="small-intent-model",
-            response_model="large-response-model",
-            retriever=RecordingRetriever([place()]),
-        )
-
-        response = service.respond(
-            object(), AssistantChatRequest(message="Recommend one museum")
-        )
-
-        self.assertEqual(response.provider_status, "available")
-        self.assertEqual(
-            provider.models,
-            [
-                "small-intent-model",
-                "small-intent-model",
-                "large-response-model",
-                "large-response-model",
-            ],
-        )
-        self.assertIn("response model recovered", response.warnings[0])
-
-    def test_semantic_evidence_is_validated_internally(self) -> None:
-        evidence = RetrievedEvidence(
-            id=31,
-            place_id=10,
-            title="Museo Test",
-            content="Description: A reviewed cinema collection.",
-            source_type="citybuddy_place",
-            source_url="https://www.openstreetmap.org/node/10",
-            attribution="OpenStreetMap contributors",
-            license="ODbL",
-            similarity=0.91,
-        )
-        grounded_output = GroundedResponse.model_validate(
-            {
-                "recommendations": [
-                    {
-                        "place_id": 10,
-                        "reason": "Its reviewed description highlights a cinema collection.",
-                        "evidence_ids": [31],
-                    }
-                ],
-                "claims": [
-                    {
-                        "place_id": 10,
-                        "field": "description",
-                        "value": "A reviewed cinema collection.",
-                    }
-                ],
-                "abstained": False,
-                "summary": "For cinema, Museo Test is the strongest match.",
-            }
-        )
-        retriever = RecordingRetriever([place(), place(place_id=11)])
-        service = AssistantService(
-            provider=SequenceProvider([RawDiscoveryIntent(categories=["museum"], needs_semantic_retrieval=True), grounded_output]),
-            model="fake",
-            retriever=retriever,
-            embedding_provider=FakeEmbeddingProvider(),
-            evidence_retriever=lambda database, **kwargs: [evidence],
-        )
-
-        response = service.respond(
-            object(), AssistantChatRequest(message="One museum for a cinema fan")
-        )
-
-        self.assertEqual(retriever.calls[0]["limit"], 1)
-        self.assertEqual(retriever.calls[0]["place_ids"], [10])
-        self.assertEqual(
-            response.answer, "For cinema, Museo Test is the strongest match."
-        )
-        self.assertEqual(
-            response.recommendations[0].reason,
-            grounded_output.recommendations[0].reason,
-        )
-
-    def test_missing_explicit_category_is_retried(self) -> None:
-        provider = SequenceProvider(
-            [intent(categories=[]), intent(limit=1), grounded()]
-        )
-        retriever = RecordingRetriever([place()])
-        service = AssistantService(
-            provider=provider,
-            model="fake",
-            retriever=retriever,
-        )
-
-        response = service.respond(
-            object(), AssistantChatRequest(message="Recommend one museum in Turin")
-        )
-
-        self.assertEqual(response.provider_status, "available")
-        self.assertEqual(response.intent.categories, ["museum"])
-        self.assertEqual(response.intent.limit, 1)
-        self.assertIn("one model retry", response.warnings[0])
-
-    def test_repeated_intent_failure_recovers_category_count_and_transport(self) -> None:
-        retriever = RecordingRetriever([place()])
-        service = AssistantService(
-            provider=SequenceProvider([RuntimeError("bad"), RuntimeError("bad")]),
-            model="fake",
-            retriever=retriever,
-        )
-
-        response = service.respond(
-            object(),
-            AssistantChatRequest(
-                message=(
-                    "Recommend one museum in Turin and tell me how to reach it "
-                    "by public transport."
-                )
-            ),
-        )
-
-        self.assertEqual(response.provider_status, "fallback")
-        self.assertEqual(response.intent.categories, ["museum"])
-        self.assertEqual(response.intent.limit, 1)
-        self.assertTrue(response.intent.wants_transport)
-        self.assertEqual(retriever.calls[0]["categories"], ["museum"])
-        self.assertEqual(retriever.calls[0]["limit"], 1)
-
-    def test_internal_ids_are_removed_from_user_visible_model_text(self) -> None:
-        grounded_output = grounded(
-            reason="Museo Test (ID: 10) is a museum.",
-            summary="I recommend Museo Test, place ID: 10.",
-        )
-        service = AssistantService(
-            provider=SequenceProvider([RawDiscoveryIntent(categories=["museum"]), grounded_output]),
-            model="fake",
-            retriever=RecordingRetriever([place()]),
-        )
-
-        response = service.respond(
-            object(), AssistantChatRequest(message="Recommend one museum")
-        )
-
-        self.assertNotIn("ID", response.answer)
-        self.assertNotIn("ID", response.recommendations[0].reason)
-        self.assertNotIn("10", response.recommendations[0].reason)
-
-    def test_single_candidate_receives_a_conversational_grounded_answer(self) -> None:
-        provider = SequenceProvider([intent(limit=1), grounded()])
-        service = AssistantService(
-            provider=provider,
-            model="fake",
-            retriever=RecordingRetriever([place()]),
-        )
-
-        response = service.respond(
-            object(), AssistantChatRequest(message="Recommend a museum")
-        )
-
-        self.assertEqual(response.provider_status, "available")
-        self.assertEqual(response.recommendations[0].place.id, 10)
-        self.assertEqual(provider.outputs, [])
-        self.assertEqual(
-            response.answer,
-            "A museum recommendation.",
-        )
-
-    def test_returns_only_validated_retrieved_recommendations(self) -> None:
-        retriever = RecordingRetriever([place(), place(place_id=11)])
-        service = AssistantService(
-            provider=SequenceProvider([intent(), grounded()]),
-            model="fake",
-            retriever=retriever,
-        )
-
-        response = service.respond(object(), AssistantChatRequest(message="A museum"))
-
-        self.assertEqual(response.provider_status, "available")
-        self.assertTrue(response.grounded)
-        self.assertEqual(response.recommendations[0].place.id, 10)
-        self.assertEqual(response.recommendations[0].reason, "A museum.")
-        self.assertEqual(retriever.calls[0]["categories"], ["museum"])
-
-    def test_unretrieved_model_place_triggers_deterministic_fallback(self) -> None:
-        service = AssistantService(
-            provider=SequenceProvider([intent(), grounded(place_id=999)]),
-            model="fake",
-            retriever=RecordingRetriever([place(), place(place_id=11)]),
-        )
-
-        response = service.respond(object(), AssistantChatRequest(message="A museum"))
-
-        self.assertEqual(response.provider_status, "fallback")
-        self.assertEqual(response.recommendations[0].place.id, 10)
-        self.assertIn("verified filters", response.warnings[0])
-
-    def test_long_grounded_description_is_bounded_for_api_schema(self) -> None:
-        retrieved = place()
-        retrieved.place.description = "Museum detail " * 30
-        grounded_output = GroundedResponse.model_validate(
-            {
-                "recommendations": [
-                    {"place_id": 10, "reason": "R" * 240}
-                ],
-                "claims": [
-                    {
-                        "place_id": 10,
-                        "field": "description",
-                        "value": retrieved.place.description,
-                    }
-                ],
-                "abstained": False,
-                "summary": "A museum recommendation.",
-            }
-        )
-        service = AssistantService(
-            provider=SequenceProvider([intent(), grounded_output]),
-            model="fake",
-            retriever=RecordingRetriever([retrieved, place(place_id=11)]),
-        )
-
-        response = service.respond(object(), AssistantChatRequest(message="A museum"))
-
-        self.assertEqual(len(response.recommendations[0].reason), 240)
-
-    def test_transport_is_detected_and_rendered_deterministically(self) -> None:
-        service = AssistantService(
-            provider=SequenceProvider([intent(), grounded()]),
-            model="fake",
-            retriever=RecordingRetriever([place()]),
-        )
-
-        response = service.respond(
-            object(),
-            AssistantChatRequest(message="How do I reach this by public transport?"),
-        )
-
-        self.assertTrue(response.intent.wants_transport)
-        self.assertEqual(
-            response.transport_disclaimer,
-            GOOGLE_MAPS_TRANSIT_DISCLAIMER,
-        )
-        self.assertIn("travelmode=transit", response.recommendations[0].transit_url)
-
-    def test_model_unavailability_returns_reviewed_database_places(self) -> None:
-        service = AssistantService(
-            provider=SequenceProvider([RuntimeError("offline")]),
-            model="fake",
-            retriever=RecordingRetriever([place()]),
-        )
-
-        response = service.respond(object(), AssistantChatRequest(message="Help me"))
-
-        self.assertEqual(response.provider_status, "fallback")
-        self.assertEqual(response.recommendations[0].place.id, 10)
-        self.assertIn("unavailable", response.warnings[0])
-
-    def test_unsupported_city_does_not_query_places(self) -> None:
-        retriever = RecordingRetriever([place()])
-        service = AssistantService(
-            provider=SequenceProvider(
-                [intent(city="lisbon", unsupported_constraints=["unsupported_city"])]
-            ),
-            model="fake",
-            retriever=retriever,
-        )
-
-        response = service.respond(
-            object(), AssistantChatRequest(message="A museum in Lisbon")
-        )
-
-        self.assertEqual(response.recommendations, [])
-        self.assertEqual(retriever.calls, [])
-        self.assertIn("Torino only", response.answer)
-
-    def test_model_failure_preserves_explicit_unsupported_city_safely(self) -> None:
-        retriever = RecordingRetriever([place()])
-        service = AssistantService(
-            provider=SequenceProvider(
-                [
-                    RuntimeError("offline"),
-                    RuntimeError("offline"),
-                    RuntimeError("offline"),
-                ]
-            ),
-            intent_model="small-intent-model",
-            response_model="large-response-model",
-            retriever=retriever,
-        )
-
-        response = service.respond(
-            object(), AssistantChatRequest(message="Recommend a museum in Lisbon")
-        )
-
-        self.assertEqual(response.provider_status, "fallback")
-        self.assertEqual(response.intent.city, "lisbon")
-        self.assertIn("unsupported_city", response.intent.unsupported_constraints)
-        self.assertEqual(response.recommendations, [])
-        self.assertEqual(retriever.calls, [])
-
-    def test_spurious_unsupported_flag_does_not_block_turin(self) -> None:
-        retriever = RecordingRetriever([place()])
-        service = AssistantService(
-            provider=SequenceProvider(
-                [
-                    intent(unsupported_constraints=["unsupported_city"]),
-                    grounded(),
-                ]
-            ),
-            model="fake",
-            retriever=retriever,
-        )
-
-        response = service.respond(
-            object(), AssistantChatRequest(message="A museum in Turin")
-        )
-
-        self.assertEqual(response.recommendations[0].place.id, 10)
-        self.assertNotIn("unsupported_city", response.intent.unsupported_constraints)
-
-    def test_explicit_singular_request_overrides_model_default_limit(self) -> None:
-        retriever = RecordingRetriever([place()])
-        service = AssistantService(
-            provider=SequenceProvider([intent(limit=5), grounded()]),
-            model="fake",
-            retriever=retriever,
-        )
-
-        response = service.respond(
-            object(), AssistantChatRequest(message="Recommend a museum")
-        )
-
-        self.assertEqual(response.intent.limit, 1)
-        self.assertEqual(retriever.calls[0]["limit"], 1)
-
-    def test_radius_is_not_mistaken_for_result_count(self) -> None:
-        retriever = RecordingRetriever([place()])
-        service = AssistantService(
-            provider=SequenceProvider([intent(nearby=True, limit=5), grounded()]),
-            model="fake",
-            retriever=retriever,
-        )
-
-        response = service.respond(
-            object(),
-            AssistantChatRequest(
-                message="Find museums near me within 2 kilometres",
-                latitude=45.07,
-                longitude=7.68,
-                radius_km=2,
-            ),
-        )
-
-        self.assertEqual(response.intent.limit, 5)
-        self.assertEqual(response.intent.radius_km, 2)
-        self.assertEqual(retriever.calls[0]["radius_km"], 2)
-
-    def test_nearby_request_requires_location(self) -> None:
-        retriever = RecordingRetriever([place()])
-        service = AssistantService(
-            provider=SequenceProvider([intent(nearby=True)]),
-            model="fake",
-            retriever=retriever,
-        )
-
-        response = service.respond(
-            object(), AssistantChatRequest(message="A museum near me")
-        )
-
-        self.assertEqual(response.recommendations, [])
-        self.assertEqual(retriever.calls, [])
-        self.assertIn("Share your location", response.answer)
-
-    def test_explicit_language_overrides_model_language(self) -> None:
-        service = AssistantService(
-            provider=SequenceProvider(
-                [
-                    intent(language="en", limit=1),
-                    grounded(
-                        reason="Una collezione cinematografica verificata.",
-                        summary="Ecco un luogo che potrebbe fare al caso tuo.",
-                    ),
-                ]
-            ),
-            model="fake",
-            retriever=RecordingRetriever([place()]),
-        )
-
-        response = service.respond(
-            object(),
-            AssistantChatRequest(message="Consigliami un museo", language="it"),
-        )
-
-        self.assertEqual(response.intent.language, "it")
-        self.assertEqual(response.answer, "Ecco un luogo che potrebbe fare al caso tuo.")
-        self.assertEqual(
-            response.recommendations[0].reason,
-            "Una collezione cinematografica verificata.",
-        )
-
-    def test_portuguese_selection_overrides_model_language(self) -> None:
-        service = AssistantService(
-            provider=SequenceProvider(
-                [
-                    intent(language="en", limit=1),
-                    grounded(
-                        reason="Uma coleção de cinema verificada.",
-                        summary="Aqui está um museu que pode ser uma boa opção.",
-                    ),
-                ]
-            ),
-            model="fake",
-            retriever=RecordingRetriever([place()]),
-        )
-
-        response = service.respond(
-            object(),
-            AssistantChatRequest(message="Recommend a museum", language="pt"),
-        )
-
-        self.assertEqual(response.intent.language, "pt")
-        self.assertEqual(response.answer, "Aqui está um museu que pode ser uma boa opção.")
-        self.assertEqual(
-            response.recommendations[0].reason,
-            "Uma coleção de cinema verificada.",
-        )
-
-    def test_bangla_fallback_respects_selected_language(self) -> None:
-        service = AssistantService(
-            provider=SequenceProvider([RuntimeError("offline"), RuntimeError("offline")]),
-            model="fake",
-            retriever=RecordingRetriever([]),
-        )
-
-        response = service.respond(
-            object(),
-            AssistantChatRequest(message="Recommend a museum", language="bn"),
-        )
-
-        self.assertEqual(response.intent.language, "bn")
-        self.assertEqual(response.answer, "এই অনুরোধের জন্য উপযুক্ত কোনো জায়গা খুঁজে পাইনি।")
-
-    def test_referential_follow_up_is_constrained_to_previous_places(self) -> None:
-        retriever = RecordingRetriever([place()])
-        service = AssistantService(
-            provider=SequenceProvider([intent(categories=[]), grounded()]),
-            model="fake",
-            retriever=retriever,
-        )
-
-        service.respond(
-            object(),
-            AssistantChatRequest(
-                message="Which one is best for cinema?",
-                context_place_ids=[10, 11],
-            ),
-        )
-
-        self.assertEqual(retriever.calls[0]["place_ids"], [10, 11])
-
-    def test_new_topic_is_not_constrained_to_previous_places(self) -> None:
-        retriever = RecordingRetriever([place()])
-        service = AssistantService(
-            provider=SequenceProvider([intent(categories=["park"]), grounded()]),
-            model="fake",
-            retriever=retriever,
-        )
-
-        service.respond(
-            object(),
-            AssistantChatRequest(
-                message="Show me a park",
-                context_place_ids=[10, 11],
-            ),
-        )
-
-        self.assertIsNone(retriever.calls[0]["place_ids"])
-
-    def test_weather_intent_routes_to_weather_tool_without_place_retrieval(self) -> None:
-        calls = []
-
-        def fake_weather(request):
-            calls.append(request)
-            return weather_forecast()
-
-        retriever = RecordingRetriever([place()])
-        service = AssistantService(
-            provider=SequenceProvider([
-                RawDiscoveryIntent(tool_intent="weather", city="turin"),
-                tool_answer(
-                    "It is 24.5°C in Torino.",
-                    field="current.air_temperature_c",
-                    value=24.5,
-                ),
-            ]),
-            model="fake",
-            retriever=retriever,
-            weather_tool=fake_weather,
-        )
-
-        response = service.respond(
-            object(), AssistantChatRequest(message="What's the weather in Turin?")
-        )
-
+        self.assertIn("quiet", embeddings.calls[0]["texts"][0])
+
+    def test_weather_task_bypasses_place_retrieval(self):
+        p = plan(tasks=[{
+            "task_type": "weather", "goal": "answer", "query": "Weather in Turin",
+            "categories": [], "preferences": [], "refers_to_context": False,
+            "nearby": False, "wants_transport": False, "forecast_hours": 12,
+        }])
+        retriever = SmartRetriever([place()])
+        service = self.service(
+            [p], [tool_answer("It is 24.5°C.", field="current.air_temperature_c", value=24.5)],
+            retriever=retriever, weather_tool=lambda request: weather_forecast(),
+        )
+        response = service.respond(object(), AssistantChatRequest(message="Weather in Turin"))
         self.assertEqual(response.intent.tool_intent, "weather")
-        self.assertEqual(response.answer, "It is 24.5°C in Torino.")
-        self.assertEqual(len(calls), 1)
         self.assertEqual(retriever.calls, [])
 
-    def test_official_opening_routes_to_reviewed_place_then_official_tool(self) -> None:
+    def test_official_menu_uses_named_reviewed_place(self):
+        p = plan(tasks=[{
+            "task_type": "official_menu", "goal": "answer", "query": "Menu at Museo Test",
+            "categories": [{"category": "museum", "quantity": 1}], "preferences": [],
+            "target_place_name": "Museo Test", "refers_to_context": False,
+            "nearby": False, "wants_transport": False, "forecast_hours": 12,
+        }])
         calls = []
-
-        def fake_official(database, **kwargs):
-            calls.append(kwargs)
-            return official_evidence()
-
-        service = AssistantService(
-            provider=SequenceProvider([
-                RawDiscoveryIntent(
-                    categories=["museum"],
-                    tool_intent="official_opening",
-                    target_place_name="Museo Test",
-                ),
-                tool_answer(
-                    "The official page says it is open Tuesday to Sunday from 10:00 to 18:00.",
-                    field="text_excerpt",
-                    value="Open Tuesday to Sunday from 10:00 to 18:00.",
-                ),
-            ]),
-            model="fake",
-            retriever=RecordingRetriever([place()]),
-            official_site_tool=fake_official,
-        )
-
-        response = service.respond(
-            object(), AssistantChatRequest(message="Is Museo Test open today?")
-        )
-
-        self.assertEqual(response.intent.tool_intent, "official_opening")
-        self.assertNotIn("live_opening_status", response.intent.unsupported_constraints)
-        self.assertEqual(
-            calls,
-            [{
-                "place_id": 10,
-                "page_type": "opening_info",
-                "query": "Is Museo Test open today?",
-            }],
-        )
-        self.assertEqual(response.recommendations[0].place.id, 10)
-
-
-    def test_menu_intent_routes_to_official_menu_page(self) -> None:
-        calls = []
-
-        def fake_official(database, **kwargs):
-            calls.append(kwargs)
-            evidence = official_evidence()
-            return evidence.model_copy(
-                update={
-                    "page_type": "menu",
-                    "text": "Lunch menu: pasta and salad.",
-                }
-            )
-
-        service = AssistantService(
-            provider=SequenceProvider([
-                RawDiscoveryIntent(
-                    categories=["museum"],
-                    tool_intent="official_menu",
-                    target_place_name="Museo Test",
-                ),
-                tool_answer(
-                    "The official menu lists pasta and salad.",
-                    field="text_excerpt",
-                    value="Lunch menu: pasta and salad.",
-                ),
-            ]),
-            model="fake",
-            retriever=RecordingRetriever([place()]),
-            official_site_tool=fake_official,
-        )
-
-        response = service.respond(
-            object(), AssistantChatRequest(message="Does Museo Test have a menu?")
-        )
-
-        self.assertEqual(response.intent.tool_intent, "official_menu")
-        self.assertEqual(
-            calls,
-            [{
-                "place_id": 10,
-                "page_type": "menu",
-                "query": "Does Museo Test have a menu?",
-            }],
-        )
-        self.assertIn("pasta", response.answer)
-
-    def test_official_grounding_accepts_whitespace_normalized_excerpt(self) -> None:
-        def fake_official(database, **kwargs):
-            evidence = official_evidence()
-            return evidence.model_copy(
-                update={
-                    "text": "Aperto dal giovedì al martedì 9.00-19.00\nultimo ingresso alle ore 18.00\nCHIUSO\nil mercoledì",
-                }
-            )
-
-        service = AssistantService(
-            provider=SequenceProvider([
-                RawDiscoveryIntent(
-                    categories=["museum"],
-                    tool_intent="official_opening",
-                    target_place_name="Museo Test",
-                ),
-                tool_answer(
-                    "The official page says the museum is closed on Wednesday.",
-                    field="text_excerpt",
-                    value="CHIUSO il mercoledì",
-                ),
-            ]),
-            model="fake",
-            retriever=RecordingRetriever([place()]),
-            official_site_tool=fake_official,
-        )
-
-        response = service.respond(
-            object(), AssistantChatRequest(message="Is Museo Test open today?")
-        )
-
-        self.assertEqual(response.provider_status, "available")
-        self.assertIn("closed", response.answer)
-
-    def test_generic_official_info_routes_to_reviewed_site_with_user_query(self) -> None:
-        calls = []
-
-        def fake_official(database, **kwargs):
-            calls.append(kwargs)
-            evidence = official_evidence()
-            return evidence.model_copy(
-                update={
-                    "page_type": "general",
-                    "text": "Fashion directory: men, women and kids collections.",
-                }
-            )
-
-        service = AssistantService(
-            provider=SequenceProvider([
-                RawDiscoveryIntent(
-                    tool_intent="official_info",
-                    target_place_name="Museo Test",
-                ),
-                tool_answer(
-                    "The official site lists men, women and kids collections.",
-                    field="text_excerpt",
-                    value="Fashion directory: men, women and kids collections.",
-                ),
-            ]),
-            model="fake",
-            retriever=RecordingRetriever([place()]),
-            official_site_tool=fake_official,
-        )
-
-        question = "What men's, women's and kids collections are there at Museo Test?"
-        response = service.respond(object(), AssistantChatRequest(message=question))
-
-        self.assertEqual(response.intent.tool_intent, "official_info")
-        self.assertEqual(
-            calls,
-            [{"place_id": 10, "page_type": "general", "query": question}],
-        )
-        self.assertEqual(response.provider_status, "available")
-
-    def test_unverified_official_site_requires_abstention(self) -> None:
-        service = AssistantService(
-            provider=SequenceProvider([
-                RawDiscoveryIntent(
-                    categories=["museum"],
-                    tool_intent="official_opening",
-                    target_place_name="Museo Test",
-                ),
-                tool_answer(
-                    "I could not verify the current opening information.",
-                    abstained=True,
-                ),
-            ]),
-            model="fake",
-            retriever=RecordingRetriever([place()]),
-            official_site_tool=lambda database, **kwargs: official_evidence(verified=False),
-        )
-
-        response = service.respond(
-            object(), AssistantChatRequest(message="Is Museo Test open today?")
-        )
-
-        self.assertEqual(response.provider_status, "available")
-        self.assertIn("could not verify", response.answer)
-
-    def test_ordinary_discovery_does_not_call_live_tools(self) -> None:
-        def unexpected(*args, **kwargs):
-            raise AssertionError("live tool should not be called")
-
-        service = AssistantService(
-            provider=SequenceProvider([
-                RawDiscoveryIntent(categories=["museum"], tool_intent="discovery"),
-                grounded(),
-            ]),
-            model="fake",
-            retriever=RecordingRetriever([place()]),
-            weather_tool=unexpected,
-            official_site_tool=unexpected,
-        )
-
-        response = service.respond(
-            object(), AssistantChatRequest(message="Recommend a museum")
-        )
-
-        self.assertEqual(response.intent.tool_intent, "discovery")
-        self.assertEqual(len(response.recommendations), 1)
-
-    def test_selected_language_remains_authoritative_after_weather_tool(self) -> None:
-        service = AssistantService(
-            provider=SequenceProvider([
-                RawDiscoveryIntent(tool_intent="weather", city="turin", language="en"),
-                tool_answer(
-                    "A Torino ci sono 24,5 °C.",
-                    field="current.air_temperature_c",
-                    value=24.5,
-                ),
-            ]),
-            model="fake",
-            weather_tool=lambda request: weather_forecast(),
-        )
-
-        response = service.respond(
-            object(),
-            AssistantChatRequest(
-                message="What's the weather in Turin?",
-                language="it",
-            ),
-        )
-
-        self.assertEqual(response.intent.language, "it")
-        self.assertEqual(response.answer, "A Torino ci sono 24,5 °C.")
-
-    def test_generic_context_follow_up_uses_rag_not_official_site(self) -> None:
-        def unexpected(*args, **kwargs):
-            raise AssertionError("ordinary follow-up must not call official site")
-
-        service = AssistantService(
-            provider=SequenceProvider([
-                RawDiscoveryIntent(tool_intent="official_info", refers_to_context=True),
-                GroundedResponse.model_validate({
-                    "recommendations": [{"place_id": 10, "reason": "A reviewed museum.", "evidence_ids": []}],
-                    "claims": [{"place_id": 10, "field": "category", "value": "museum"}],
-                    "abstained": False,
-                    "summary": "Here is more about the museum.",
-                }),
-            ]),
-            model="fake",
-            retriever=RecordingRetriever([place()]),
-            official_site_tool=unexpected,
-        )
-
-        response = service.respond(
-            object(),
-            AssistantChatRequest(
-                message="Tell me more about the first one.",
-                context_place_ids=[10],
-            ),
-        )
-
-        self.assertEqual(response.intent.tool_intent, "discovery")
-        self.assertEqual(response.answer, "Here is more about the museum.")
-        self.assertEqual(response.recommendations[0].place.id, 10)
-
-    def test_weather_current_message_overrides_previous_place_context(self) -> None:
-        service = AssistantService(
-            provider=SequenceProvider([
-                RawDiscoveryIntent(tool_intent="official_info", refers_to_context=True),
-                tool_answer(
-                    "It is 24.5 °C in Turin.",
-                    field="current.air_temperature_c",
-                    value=24.5,
-                ),
-            ]),
-            model="fake",
-            weather_tool=lambda request: weather_forecast(),
-        )
-
-        response = service.respond(
-            object(),
-            AssistantChatRequest(
-                message="What's the weather in Turin?",
-                context_place_ids=[10],
-            ),
-        )
-
-        self.assertEqual(response.intent.tool_intent, "weather")
-        self.assertEqual(response.answer, "It is 24.5 °C in Turin.")
-
-    def test_explicit_named_official_target_overrides_previous_context(self) -> None:
-        armeria = place(5, name="Armeria Reale")
-        alle = place(1351, name="Alle Lavagne", category="restaurant")
-        calls = []
-
         def official(database, **kwargs):
             calls.append(kwargs)
-            return OfficialSiteEvidence(
-                place_id=1351,
-                place_name="Alle Lavagne",
-                page_type="menu",
-                official_host="example.org",
-                source_url="https://example.org/menu",
-                fetched_at=datetime(2026, 8, 19, 9, 0, tzinfo=timezone.utc),
-                verified=True,
-                reason=None,
-                title="Menu",
-                text="Menu vegetarian options available.",
-                truncated=False,
-            )
-
-        service = AssistantService(
-            provider=SequenceProvider([
-                RawDiscoveryIntent(
-                    tool_intent="official_menu",
-                    target_place_name="Alle Lavagne",
-                ),
-                tool_answer(
-                    "The menu mentions vegetarian options.",
-                    field="text_excerpt",
-                    value="Menu vegetarian options available.",
-                ),
-            ]),
-            model="fake",
-            retriever=RecordingRetriever([armeria, alle]),
+            return official_evidence()
+        response = self.service(
+            [p], [tool_answer("The menu lists pasta and salad.", field="text_excerpt", value="Lunch menu: pasta and salad.")],
             official_site_tool=official,
+        ).respond(object(), AssistantChatRequest(message="Menu at Museo Test"))
+        self.assertEqual(response.intent.tool_intent, "official_menu")
+        self.assertEqual(calls[0]["place_id"], 10)
+
+    def test_context_reference_scopes_retrieval(self):
+        p = plan(continuation=True, tasks=[discovery_task(
+            query="Tell me more about the second one", category=None, quantity=None,
+            goal="describe", refers_to_context=True, reference_position=2,
+        )])
+        retriever = SmartRetriever([place(10), place(11, "Second Museum")])
+        self.service([p], [grounded([11])], retriever=retriever).respond(
+            object(), AssistantChatRequest(message="Tell me more about the second one", context_place_ids=[10, 11])
         )
+        self.assertEqual(retriever.calls[-1]["place_ids"], [11])
 
-        response = service.respond(
-            object(),
-            AssistantChatRequest(
-                message="What's on the menu at Alle Lavagne?",
-                context_place_ids=[5],
-            ),
+    def test_named_place_is_not_confused_with_supported_city(self):
+        p = plan(tasks=[discovery_task(query="Museums in Turin", quantity=1, target_place_name="Turin")])
+        retriever = SmartRetriever([place()])
+        response = self.service([p], [grounded([10])], retriever=retriever).respond(
+            object(), AssistantChatRequest(message="Museums in Turin")
         )
+        self.assertIsNone(response.intent.target_place_name)
+        self.assertIsNone(retriever.calls[-1]["name_query"])
 
-        self.assertEqual(calls[0]["place_id"], 1351)
-        self.assertEqual(response.recommendations[0].place.id, 1351)
-
-    def test_named_discovery_target_is_searched_by_current_name(self) -> None:
-        retriever = RecordingRetriever([place(1351, name="Alle Lavagne", category="restaurant")])
-        service = AssistantService(
-            provider=SequenceProvider([
-                RawDiscoveryIntent(
-                    tool_intent="official_info",
-                    target_place_name="Alle Lavagne",
-                ),
-                GroundedResponse.model_validate({
-                    "recommendations": [{"place_id": 1351, "reason": "A reviewed restaurant.", "evidence_ids": []}],
-                    "claims": [{"place_id": 1351, "field": "category", "value": "restaurant"}],
-                    "abstained": False,
-                    "summary": "Alle Lavagne is a reviewed restaurant in Turin.",
-                }),
-            ]),
-            model="fake",
-            retriever=retriever,
+    def test_unsupported_city_is_rejected_without_retrieval(self):
+        p = plan(city="milan", tasks=[discovery_task(query="Museum in Milan", quantity=1)])
+        retriever = SmartRetriever([place()])
+        response = self.service([p], [], retriever=retriever).respond(
+            object(), AssistantChatRequest(message="Museum in Milan")
         )
-
-        response = service.respond(
-            object(),
-            AssistantChatRequest(
-                message="Tell me about Alle Lavagne.",
-                context_place_ids=[5],
-            ),
-        )
-
-        self.assertEqual(response.intent.tool_intent, "discovery")
-        self.assertEqual(retriever.calls[0]["categories"], [])
-        self.assertEqual(retriever.calls[0]["name_query"], "Alle Lavagne")
-        self.assertEqual(response.recommendations[0].place.id, 1351)
-
-    def test_explicit_unsupported_city_survives_intent_model_failure(self) -> None:
-        service = AssistantService(
-            provider=SequenceProvider([RuntimeError(), RuntimeError()]),
-            model="fake",
-            retriever=RecordingRetriever([place()]),
-        )
-
-        response = service.respond(
-            object(), AssistantChatRequest(message="Recommend somewhere in Milan.")
-        )
-
-        self.assertEqual(response.intent.city, "milan")
         self.assertEqual(response.recommendations, [])
+        self.assertEqual(retriever.calls, [])
+        self.assertIn("Torino", response.answer)
 
-    def test_explicit_multi_category_counts_are_preserved_per_category(self) -> None:
-        museum = place(10, name="Museo Test", category="museum")
-        park = place(20, name="Parco Test", category="park")
-
-        class CategoryRetriever:
-            def __init__(self):
-                self.calls = []
-
-            def __call__(self, database, **kwargs):
-                self.calls.append(kwargs)
-                if kwargs["categories"] == ["museum"]:
-                    return [museum]
-                if kwargs["categories"] == ["park"]:
-                    return [park]
-                return []
-
-        retriever = CategoryRetriever()
-        response_output = GroundedResponse.model_validate({
-            "recommendations": [
-                {"place_id": 10, "reason": "A reviewed museum.", "evidence_ids": []},
-                {"place_id": 20, "reason": "A reviewed park.", "evidence_ids": []},
-            ],
-            "claims": [
-                {"place_id": 10, "field": "category", "value": "museum"},
-                {"place_id": 20, "field": "category", "value": "park"},
-            ],
-            "abstained": False,
-            "summary": "Here is one museum and one park in Turin.",
-        })
+    def test_invalid_planner_category_is_retried(self):
+        bad = plan(tasks=[discovery_task(query="Museum", category="not_a_category", quantity=1)])
+        good = plan(tasks=[discovery_task(query="Museum", quantity=1)])
+        planner = QueueProvider([bad, good])
+        response_provider = QueueProvider([grounded([10])])
         service = AssistantService(
-            provider=SequenceProvider([
-                RawDiscoveryIntent(categories=["museum", "park"], limit=9),
-                response_output,
-            ]),
-            model="fake",
+            planner_provider=planner, response_provider=response_provider,
+            planner_model="qwen-test", response_model="gemma-test",
+            retriever=SmartRetriever([place()]),
+        )
+        response = service.respond(object(), AssistantChatRequest(message="Museum"))
+        self.assertEqual(response.provider_status, "available")
+        self.assertEqual(len(planner.calls), 2)
+
+    def test_planner_failure_fails_closed_without_handwritten_nlp(self):
+        planner = QueueProvider([RuntimeError(), RuntimeError()])
+        response_provider = QueueProvider([RuntimeError()])
+        retriever = SmartRetriever([place()])
+        service = AssistantService(
+            planner_provider=planner, response_provider=response_provider,
+            planner_model="qwen-test", response_model="gemma-test", retriever=retriever,
+        )
+        response = service.respond(object(), AssistantChatRequest(message="Recommend a museum"))
+        self.assertEqual(response.provider_status, "fallback")
+        self.assertEqual(response.recommendations, [])
+        self.assertEqual(retriever.calls, [])
+
+    def test_compound_plan_is_synthesized_by_gemma(self):
+        p = plan(mode="compound", tasks=[
+            discovery_task(query="One museum", quantity=1),
+            discovery_task(query="One park", category="park", quantity=1),
+        ])
+        retriever = SmartRetriever([place(10), place(20, "Parco Test", "park")])
+        service = self.service(
+            [p],
+            [grounded([10], "Museum result."), grounded([20], "Park result."), PlanSynthesisResponse(answer="Museum then park.")],
             retriever=retriever,
         )
+        response = service.respond(object(), AssistantChatRequest(message="One museum and one park"))
+        self.assertEqual(response.answer, "Museum then park.")
+        self.assertEqual({r.place.id for r in response.recommendations}, {10, 20})
 
+    def test_comparison_goal_uses_semantic_context(self):
+        p = plan(mode="comparison", continuation=True, tasks=[discovery_task(
+            query="Which is better for a family?", category=None, quantity=None,
+            goal="compare", refers_to_context=True,
+        )])
+        embeddings = FakeEmbeddingProvider()
+        retriever = SmartRetriever([place(10), place(11, "Second Museum")])
+        service = self.service(
+            [p], [grounded([10, 11], "The first is better for a family.")],
+            retriever=retriever, embedding_provider=embeddings,
+            evidence_retriever=lambda database, **kwargs: [],
+        )
         response = service.respond(
-            object(),
-            AssistantChatRequest(message="Recommend one museum and one park in Turin."),
+            object(), AssistantChatRequest(message="Which is better for a family?", context_place_ids=[10, 11])
         )
+        self.assertEqual(response.intent.goal, "compare")
+        self.assertEqual(len(embeddings.calls), 1)
 
-        self.assertEqual(response.intent.categories, ["museum", "park"])
-        self.assertEqual(response.intent.limit, 2)
-        self.assertEqual(
-            [item.place.category for item in response.recommendations],
-            ["museum", "park"],
-        )
-        self.assertIn(["museum"], [call["categories"] for call in retriever.calls])
-        self.assertIn(["park"], [call["categories"] for call in retriever.calls])
-
-    def test_compound_message_executes_bounded_subrequests_with_context(self) -> None:
-        museum = place(10, name="Museo Test", category="museum")
-        park = place(20, name="Parco Test", category="park")
-
-        class CategoryRetriever:
-            def __call__(self, database, **kwargs):
-                if kwargs["categories"] == ["museum"]:
-                    return [museum]
-                if kwargs["categories"] == ["park"]:
-                    return [park]
-                return []
-
-        service = AssistantService(
-            provider=SequenceProvider([
-                RawDiscoveryIntent(categories=["museum"], limit=1),
-                GroundedResponse.model_validate({
-                    "recommendations": [{"place_id": 10, "reason": "A museum.", "evidence_ids": []}],
-                    "claims": [{"place_id": 10, "field": "category", "value": "museum"}],
-                    "abstained": False,
-                    "summary": "Museo Test is a museum in Turin.",
-                }),
-                RawDiscoveryIntent(categories=["park"], limit=1),
-                GroundedResponse.model_validate({
-                    "recommendations": [{"place_id": 20, "reason": "A park.", "evidence_ids": []}],
-                    "claims": [{"place_id": 20, "field": "category", "value": "park"}],
-                    "abstained": False,
-                    "summary": "Parco Test is a park in Turin.",
-                }),
-            ]),
-            model="fake",
-            retriever=CategoryRetriever(),
-        )
-
-        response = service.respond(
-            object(),
-            AssistantChatRequest(
-                message="Recommend one museum in Turin. Recommend one park in Turin."
-            ),
-        )
-
-        self.assertIn("Museo Test", response.answer)
-        self.assertIn("Parco Test", response.answer)
-        self.assertEqual(
-            [item.place.id for item in response.recommendations],
-            [10, 20],
-        )
+    def test_nearby_without_location_returns_location_request(self):
+        p = plan(tasks=[discovery_task(query="Museum near me", quantity=1, nearby=True, radius_km=2)])
+        response = self.service([p], []).respond(object(), AssistantChatRequest(message="Museum near me"))
+        self.assertIn("location", response.answer.casefold())
 
 
 if __name__ == "__main__":

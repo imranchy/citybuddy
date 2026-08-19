@@ -1,9 +1,9 @@
 export type Language = "en" | "it" | "pt" | "de" | "bn";
 
-export const LANGUAGE_OPTIONS: ReadonlyArray<{ value: Language; label: string }> = [
-  { value: "en", label: "English" },
-  { value: "it", label: "Italiano" },
-  { value: "pt", label: "Português" },
-  { value: "de", label: "Deutsch" },
-  { value: "bn", label: "বাংলা" },
+export const LANGUAGE_OPTIONS: ReadonlyArray<{ value: Language; label: string; flag: string }> = [
+  { value: "en", label: "English", flag: "🇬🇧" },
+  { value: "it", label: "Italiano", flag: "🇮🇹" },
+  { value: "pt", label: "Português", flag: "🇵🇹" },
+  { value: "de", label: "Deutsch", flag: "🇩🇪" },
+  { value: "bn", label: "বাংলা", flag: "🇧🇩" },
 ];

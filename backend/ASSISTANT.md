@@ -194,3 +194,31 @@ layout differences). Today/now answers also receive the supported city's applica
 owned local date and weekday. If a page is unverified, dynamically rendered with no
 readable static content, or does not state the requested fact (for example halal status),
 the assistant must abstain rather than infer it.
+
+## Semantic planner and response-language policy
+
+Interactive requests now use Qwen as a bounded semantic planner rather than treating the
+model as a single-intent keyword classifier. The planner emits a validated `SemanticPlan`
+containing request/response language, ordered tasks, canonical category requests with
+per-category quantities, semantic preferences, conversational references, live-tool intent,
+and a high-level goal (`recommend`, `describe`, `compare`, `itinerary`, or `answer`).
+Application code validates catalog keys, limits, supported cities, reviewed-place identity,
+and tool boundaries before any retrieval executes.
+
+Language interpretation is model-owned in the planner path. The page language is the UI
+fallback, while the current message language or an explicit response-language instruction
+may select the response language. Application code validates the resulting language code but
+does not need per-language number-word dictionaries for production planner requests. This
+keeps future language additions primarily in UI copy, planner evaluation, and language
+configuration rather than duplicating NLP rules throughout the backend.
+
+Compound plans execute as a bounded sequence of ordinary CityBuddy retrieval/tool tasks.
+Gemma receives the validated task results, reviewed place records, RAG evidence, structured
+place facts, conversation context, distance/transit information, and application-owned time
+context, then performs comparison, trade-off reasoning, itinerary synthesis, and natural
+response composition. Models still have no arbitrary SQL, filesystem, shell, or unrestricted
+network access.
+
+Planner and response inference can be isolated operationally with
+`OLLAMA_PLANNER_BASE_URL` and `OLLAMA_RESPONSE_BASE_URL`. If those variables are empty,
+CityBuddy keeps the existing single-Ollama local behavior.

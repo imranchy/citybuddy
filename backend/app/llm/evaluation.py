@@ -4,8 +4,8 @@ from statistics import mean, median
 from typing import Any
 
 from app.llm.base import StructuredLLMProvider
-from app.llm.prompts import GROUNDED_SYSTEM_PROMPT, INTENT_SYSTEM_PROMPT
-from app.llm.schemas import DiscoveryIntent, GroundedClaim, GroundedResponse
+from app.llm.prompts import GROUNDED_SYSTEM_PROMPT, SEMANTIC_PLANNER_SYSTEM_PROMPT
+from app.llm.schemas import GroundedClaim, GroundedResponse, SemanticPlan
 from app.llm.tracing import TraceConfig, finish_trace, trace_evaluation_case
 
 
@@ -101,16 +101,21 @@ GROUNDING_CASES = (
 )
 
 
-def _intent_checks(case: IntentCase, intent: DiscoveryIntent) -> dict[str, bool]:
+def _intent_checks(case: IntentCase, plan: SemanticPlan) -> dict[str, bool]:
+    if len(plan.tasks) != 1:
+        return {"single_task": False}
+    task = plan.tasks[0]
+    categories = [item.category for item in task.categories]
+    quantities = [item.quantity for item in task.categories if item.quantity is not None]
+    inferred_limit = quantities[0] if len(task.categories) == 1 and len(quantities) == 1 else 5
     return {
-        "categories": set(intent.categories) == set(case.categories),
-        "language": intent.language == case.language,
-        "city": intent.city == case.city,
-        "limit": intent.limit == case.limit,
-        "nearby": intent.nearby == case.nearby,
-        "radius_km": intent.radius_km == case.radius_km,
-        "wants_transport": intent.wants_transport == case.wants_transport,
-        "unsupported_constraints": set(intent.unsupported_constraints) == set(case.unsupported_constraints),
+        "categories": set(categories) == set(case.categories),
+        "language": plan.response_language == case.language,
+        "city": plan.city == case.city,
+        "limit": inferred_limit == case.limit,
+        "nearby": task.nearby == case.nearby,
+        "radius_km": task.radius_km == case.radius_km,
+        "wants_transport": task.wants_transport == case.wants_transport,
     }
 
 
@@ -189,7 +194,7 @@ def evaluate_model(provider: StructuredLLMProvider, *, model: str, trace_config:
     durations: list[float] = []
     load_durations: list[float] = []
 
-    def run_case(*, kind: str, key: str, prompt: str, schema: type[DiscoveryIntent] | type[GroundedResponse], expected: Any) -> None:
+    def run_case(*, kind: str, key: str, prompt: str, schema: type[SemanticPlan] | type[GroundedResponse], expected: Any) -> None:
         trace = None
         try:
             with trace_evaluation_case(
@@ -198,7 +203,7 @@ def evaluate_model(provider: StructuredLLMProvider, *, model: str, trace_config:
                 inputs={"prompt": prompt, "expected": asdict(expected)},
                 metadata={"model": model, "case_kind": kind, "case_key": key},
             ) as trace:
-                call = provider.generate_structured(model=model, system_prompt=INTENT_SYSTEM_PROMPT if kind == "intent" else GROUNDED_SYSTEM_PROMPT, user_prompt=prompt, output_schema=schema)
+                call = provider.generate_structured(model=model, system_prompt=SEMANTIC_PLANNER_SYSTEM_PROMPT if kind == "intent" else GROUNDED_SYSTEM_PROMPT, user_prompt=prompt, output_schema=schema)
                 output = schema.model_validate(call.output)
                 if kind == "intent":
                     checks = _intent_checks(expected, output)
@@ -238,7 +243,7 @@ def evaluate_model(provider: StructuredLLMProvider, *, model: str, trace_config:
             case_results.append(result)
 
     for case in INTENT_CASES:
-        run_case(kind="intent", key=case.key, prompt=case.query, schema=DiscoveryIntent, expected=case)
+        run_case(kind="intent", key=case.key, prompt=case.query, schema=SemanticPlan, expected=case)
     for case in GROUNDING_CASES:
         run_case(kind="grounding", key=case.key, prompt=case.prompt, schema=GroundedResponse, expected=case)
 

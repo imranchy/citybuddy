@@ -5,6 +5,8 @@ import PlaceCard from "@/components/PlaceCard";
 import PlaceFilters from "@/components/PlaceFilters";
 import usePlacesDiscovery from "@/hooks/usePlacesDiscovery";
 import dynamic from "next/dynamic";
+import { DISCOVERY_STATUS_COPY, PLACES_COPY } from "@/lib/i18n";
+import type { Language } from "@/types/language";
 
 const PlaceMap = dynamic(
   () => import("@/components/PlaceMap"),
@@ -18,7 +20,8 @@ const PlaceMap = dynamic(
   },
 );
 
-export default function PlacesSection() {
+export default function PlacesSection({ language }: { language: Language }) {
+  const t = PLACES_COPY[language];
   const {
     places,
     placesStatus,
@@ -42,7 +45,7 @@ export default function PlacesSection() {
     setRadiusKm,
     setLocationStatus,
     handleUseLocation,
-  } = usePlacesDiscovery();
+  } = usePlacesDiscovery(language);
 
   return (
     <section
@@ -53,14 +56,14 @@ export default function PlacesSection() {
         <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.25em] text-[#FFC83D]">
-              Explore places
+              {t.eyebrow}
             </p>
 
             <h2
               id="places-heading"
               className="mt-3 text-3xl font-bold tracking-tight sm:text-4xl"
             >
-              Places in {city || "your city"}
+              {t.heading} {city || "your city"}
             </h2>
           </div>
 
@@ -74,6 +77,7 @@ export default function PlacesSection() {
         </div>
 
         <PlaceFilters
+          language={language}
           categories={categories}
           category={category}
           cityInput={cityInput}
@@ -101,6 +105,7 @@ export default function PlacesSection() {
         />
 
         <LocationControls
+          language={language}
           radiusKm={radiusKm}
           isLocating={isLocating}
           locationStatus={locationStatus}
@@ -110,7 +115,7 @@ export default function PlacesSection() {
 
             if (userLocation) {
               setLocationStatus(
-                `Showing places within ${newRadius} km of you.`,
+                DISCOVERY_STATUS_COPY[language].within(newRadius),
               );
             }
           }}
@@ -131,7 +136,7 @@ export default function PlacesSection() {
 
         {isLoadingPlaces ? (
           <div className="mt-8 rounded-3xl border border-white/10 bg-[#121936] p-8 text-center text-[#A9B1D6]">
-            Loading places...
+            {t.loading}
           </div>
         ) : places.length > 0 ? (
           <div className="mt-8 grid gap-5 md:grid-cols-2">
@@ -159,11 +164,11 @@ export default function PlacesSection() {
                 }}
                 className="min-h-11 rounded-xl border border-white/10 px-5 font-medium text-[#FFF8E7] transition hover:border-[#FF6846]/50 disabled:cursor-not-allowed disabled:opacity-40"
               >
-                Previous
+                {t.previous}
               </button>
 
               <p className="text-sm text-[#A9B1D6]">
-                Page {Math.floor(offset / limit) + 1}
+                {t.page} {Math.floor(offset / limit) + 1}
               </p>
 
               <button
@@ -176,7 +181,7 @@ export default function PlacesSection() {
                 }}
                 className="min-h-11 rounded-xl bg-[#FF6846] px-5 font-semibold text-[#070B24] transition hover:bg-[#FF826B] disabled:cursor-not-allowed disabled:opacity-40"
               >
-                Next
+                {t.next}
               </button>
             </div>
           )}
