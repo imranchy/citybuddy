@@ -70,7 +70,7 @@ class MCPServerTests(unittest.TestCase):
 
         tool = asyncio.run(run_test())
         properties = tool.input_schema.get("properties", {})
-        self.assertEqual(set(properties), {"place_id", "page_type"})
+        self.assertEqual(set(properties), {"place_id", "page_type", "query"})
         self.assertNotIn("url", properties)
 
     def test_mcp_official_site_returns_structured_content(self):
@@ -93,7 +93,11 @@ class MCPServerTests(unittest.TestCase):
                 async with Client(mcp) as client:
                     return await client.call_tool(
                         "get_official_place_page",
-                        {"place_id": 76, "page_type": "general"},
+                        {
+                            "place_id": 76,
+                            "page_type": "general",
+                            "query": "What facilities are available?",
+                        },
                     )
 
         result = asyncio.run(run_test())

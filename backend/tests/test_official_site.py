@@ -111,6 +111,44 @@ class OfficialSiteServiceTests(unittest.TestCase):
         self.assertNotIn("hidden", result.text)
 
 
+    def test_general_query_can_follow_matching_same_domain_link(self):
+        requested: list[str] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            requested.append(str(request.url))
+            if request.url.path == "/":
+                return httpx.Response(
+                    200,
+                    headers={"Content-Type": "text/html"},
+                    text=(
+                        "<html><body>"
+                        "<a href='/brands'>Brands and collections</a>"
+                        "<a href='https://outside.example/collections'>External collections</a>"
+                        "</body></html>"
+                    ),
+                )
+            self.assertEqual(request.url.path, "/brands")
+            return httpx.Response(
+                200,
+                headers={"Content-Type": "text/html"},
+                text="<html><body>Men Women Kids fashion collections</body></html>",
+            )
+
+        with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+            result = fetch_official_site(
+                place_id=76,
+                place_name="Mall",
+                website="https://example.org/",
+                page_type="general",
+                query="What men's, women's and kids collections are there?",
+                client=client,
+                resolver=public_resolver,
+            )
+
+        self.assertEqual(requested, ["https://example.org/", "https://example.org/brands"])
+        self.assertEqual(result.source_url, "https://example.org/brands")
+        self.assertIn("Men Women Kids", result.text)
+
     def test_no_readable_static_content_returns_safe_unverified_evidence(self):
         def handler(request: httpx.Request) -> httpx.Response:
             return httpx.Response(
@@ -187,6 +225,7 @@ class OfficialSiteToolTests(unittest.TestCase):
             place_name="A come Ambiente",
             website="https://example.org/",
             page_type="general",
+            query=None,
         )
         self.assertEqual(result.source_url, "https://example.org/")
 

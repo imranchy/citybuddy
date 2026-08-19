@@ -9,6 +9,7 @@ def get_official_place_page(
     *,
     place_id: int,
     page_type: OfficialPageType,
+    query: str | None = None,
 ) -> OfficialSiteEvidence:
     """Retrieve live evidence only from a reviewed place's stored official website."""
 
@@ -26,4 +27,5 @@ def get_official_place_page(
         place_name=place.name,
         website=place.website,
         page_type=page_type,
+        query=query,
     )

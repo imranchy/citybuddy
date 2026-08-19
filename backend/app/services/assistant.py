@@ -3,6 +3,9 @@ from __future__ import annotations
 import json
 import logging
 import re
+import unicodedata
+from datetime import datetime
+from zoneinfo import ZoneInfo
 from dataclasses import asdict
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
@@ -17,12 +20,17 @@ from app.core.place_catalog import (
 )
 from app.llm.base import StructuredLLMProvider
 from app.llm.embeddings import EmbeddingProvider
-from app.llm.prompts import ASSISTANT_RESPONSE_SYSTEM_PROMPT, INTENT_SYSTEM_PROMPT
+from app.llm.prompts import (
+    ASSISTANT_RESPONSE_SYSTEM_PROMPT,
+    INTENT_SYSTEM_PROMPT,
+    TOOL_RESPONSE_SYSTEM_PROMPT,
+)
 from app.llm.schemas import (
     DiscoveryIntent,
     GroundedClaim,
     GroundedResponse,
     RawDiscoveryIntent,
+    ToolGroundedResponse,
 )
 from app.schemas.assistant import (
     AssistantChatRequest,
@@ -31,6 +39,9 @@ from app.schemas.assistant import (
 )
 from app.services.place_types import RetrievedPlace
 from app.services.rag import RetrievedEvidence
+from app.services.official_site import OfficialPageType, OfficialSiteEvidence
+from app.services.weather import WeatherForecast
+from app.tools.weather import WeatherRequest
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session
@@ -41,6 +52,8 @@ logger = logging.getLogger(__name__)
 
 PlaceRetriever = Callable[..., list[RetrievedPlace]]
 EvidenceRetriever = Callable[..., list[RetrievedEvidence]]
+WeatherTool = Callable[[WeatherRequest], WeatherForecast]
+OfficialSiteTool = Callable[..., OfficialSiteEvidence]
 
 TRANSPORT_TERMS = (
     "public transport",
@@ -329,6 +342,16 @@ def normalize_discovery_intent(
     nearby = _asks_for_nearby(request.message) or explicit_radius is not None
 
     wants_transport = bool(intent.wants_transport) or _asks_for_transport(request.message)
+    constraints = _deterministic_constraints(
+        request.message,
+        validated_city,
+        wants_transport=wants_transport,
+    )
+    if intent.tool_intent == "official_opening":
+        constraints = [item for item in constraints if item != "live_opening_status"]
+    if intent.tool_intent == "official_prices":
+        constraints = [item for item in constraints if item != "unverified_price"]
+
     normalized = {
         "language": request.language,
         "city": validated_city,
@@ -337,11 +360,10 @@ def normalize_discovery_intent(
         "nearby": nearby,
         "radius_km": explicit_radius if nearby else None,
         "wants_transport": wants_transport,
-        "unsupported_constraints": _deterministic_constraints(
-            request.message,
-            validated_city,
-            wants_transport=wants_transport,
-        ),
+        "tool_intent": intent.tool_intent,
+        "target_place_name": intent.target_place_name,
+        "forecast_hours": intent.forecast_hours,
+        "unsupported_constraints": constraints,
     }
     return DiscoveryIntent.model_validate(normalized)
 
@@ -471,6 +493,215 @@ def _answer_text(*, count: int, language: str, fallback: bool) -> str:
     return fallback_text(language, "no_places")
 
 
+def _tool_prompt(
+    request: AssistantChatRequest,
+    intent: DiscoveryIntent,
+    *,
+    tool_name: str,
+    evidence: dict[str, Any],
+) -> str:
+    return json.dumps(
+        {
+            "conversation_history": [item.model_dump() for item in request.history],
+            "current_user_message": request.message,
+            "validated_intent": intent.model_dump(),
+            "required_response_language": intent.language,
+            "required_response_language_name": language_name(intent.language),
+            "tool_name": tool_name,
+            "tool_evidence": evidence,
+        },
+        ensure_ascii=False,
+        default=str,
+    )
+
+
+def _weather_claims(forecast: WeatherForecast) -> dict[str, Any]:
+    payload = forecast.model_dump(mode="json")
+    current = payload["current"]
+    facts: dict[str, Any] = {
+        "city": payload["city"],
+        "timezone": payload["timezone"],
+        "forecast_hours": payload["forecast_hours"],
+        "current.time": current["time"],
+        "current.air_temperature_c": current["air_temperature_c"],
+        "current.relative_humidity_percent": current["relative_humidity_percent"],
+        "current.wind_speed_mps": current["wind_speed_mps"],
+        "current.precipitation_amount_mm": current["precipitation_amount_mm"],
+        "current.symbol_code": current["symbol_code"],
+    }
+    for index, point in enumerate(payload["forecast"]):
+        prefix = f"forecast.{index}"
+        for field in (
+            "time",
+            "air_temperature_c",
+            "relative_humidity_percent",
+            "wind_speed_mps",
+            "precipitation_amount_mm",
+            "symbol_code",
+        ):
+            facts[f"{prefix}.{field}"] = point[field]
+    return facts
+
+
+OFFICIAL_EVIDENCE_HINTS: dict[OfficialPageType, tuple[str, ...]] = {
+    "general": (),
+    "menu": (
+        "menu", "carta", "food", "drink", "dish", "piatto", "veget",
+        "vegan", "halal", "allergen", "allergeni", "gluten", "senza",
+    ),
+    "exhibitions": ("exhibition", "exhibit", "mostra", "mostre", "event", "eventi"),
+    "prices": ("price", "pricing", "prezzo", "prezzi", "ticket", "bigliett", "euro", "€"),
+    "opening_info": (
+        "opening", "hours", "orari", "apert", "chius", "closed", "open",
+        "ingresso",
+    ),
+}
+
+
+def _official_query_terms(message: str) -> tuple[str, ...]:
+    words = re.findall(r"[\wÀ-ÿ]+", message.casefold(), flags=re.UNICODE)
+    ignored = {
+        "the", "and", "for", "with", "that", "this", "what", "does", "have",
+        "are", "there", "any", "can", "you", "about", "from", "into", "their",
+    }
+    return tuple(dict.fromkeys(word for word in words if len(word) >= 3 and word not in ignored))[:24]
+
+
+def _relevant_official_excerpt(
+    text: str | None,
+    *,
+    message: str,
+    page_type: OfficialPageType,
+    max_chars: int = 4_500,
+) -> str | None:
+    """Select a compact verbatim window from verified official-site text."""
+
+    if not text:
+        return None
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    if not lines:
+        return None
+
+    terms = tuple(dict.fromkeys((*OFFICIAL_EVIDENCE_HINTS[page_type], *_official_query_terms(message))))
+    scored: list[tuple[int, int]] = []
+    for index, line in enumerate(lines):
+        lowered = line.casefold()
+        score = sum(1 for term in terms if term in lowered)
+        if score:
+            scored.append((-score, index))
+
+    if not scored:
+        return "\n".join(lines)[:max_chars].rstrip()
+
+    scored.sort()
+    selected: set[int] = set()
+    for _, index in scored[:10]:
+        for candidate in range(max(0, index - 2), min(len(lines), index + 3)):
+            selected.add(candidate)
+
+    excerpt_lines: list[str] = []
+    length = 0
+    for index in sorted(selected):
+        line = lines[index]
+        addition = len(line) + (1 if excerpt_lines else 0)
+        if length + addition > max_chars:
+            break
+        excerpt_lines.append(line)
+        length += addition
+    return "\n".join(excerpt_lines).strip() or "\n".join(lines)[:max_chars].rstrip()
+
+
+def _normalized_evidence_text(value: str) -> str:
+    return " ".join(unicodedata.normalize("NFKC", value).split())
+
+
+def _city_time_facts(intent: DiscoveryIntent) -> dict[str, str]:
+    city = CITIES.get(intent.city)
+    if city is None:
+        return {}
+    local_now = datetime.now(ZoneInfo(city.timezone))
+    return {
+        "city_local_date": local_now.date().isoformat(),
+        "city_local_weekday": local_now.strftime("%A"),
+        "city_timezone": city.timezone,
+    }
+
+
+def _validate_tool_grounding(
+    response: ToolGroundedResponse,
+    *,
+    facts: dict[str, Any],
+    official_text: str | None = None,
+    must_abstain: bool = False,
+) -> None:
+    if must_abstain and not response.abstained:
+        raise GroundingValidationError("Unverified live evidence did not abstain.")
+    if response.abstained:
+        if response.claims:
+            raise GroundingValidationError("A live-tool abstention contained claims.")
+        return
+    if not response.claims:
+        raise GroundingValidationError("A live-tool answer omitted supporting claims.")
+    for claim in response.claims:
+        if claim.field == "text_excerpt":
+            if (
+                not isinstance(claim.value, str)
+                or not official_text
+                or _normalized_evidence_text(claim.value)
+                not in _normalized_evidence_text(official_text)
+            ):
+                raise GroundingValidationError("Official-site excerpt was unsupported.")
+            continue
+        if claim.field not in facts or facts[claim.field] != claim.value:
+            raise GroundingValidationError("Live-tool claim was unsupported.")
+
+
+def _official_page_type(tool_intent: str) -> OfficialPageType:
+    mapping: dict[str, OfficialPageType] = {
+        "official_opening": "opening_info",
+        "official_menu": "menu",
+        "official_exhibitions": "exhibitions",
+        "official_prices": "prices",
+        "official_info": "general",
+    }
+    return mapping[tool_intent]
+
+
+def _select_official_target(
+    places: list[RetrievedPlace],
+    *,
+    target_name: str | None,
+    context_place_ids: list[int],
+) -> RetrievedPlace | None:
+    if len(context_place_ids) == 1:
+        contextual = next(
+            (item for item in places if item.place.id == context_place_ids[0]),
+            None,
+        )
+        if contextual is not None:
+            return contextual
+
+    if target_name:
+        normalized = " ".join(target_name.casefold().split())
+        exact = [
+            item
+            for item in places
+            if " ".join(item.place.name.casefold().split()) == normalized
+        ]
+        if len(exact) == 1:
+            return exact[0]
+        partial = [
+            item
+            for item in places
+            if normalized in item.place.name.casefold()
+            or item.place.name.casefold() in normalized
+        ]
+        if len(partial) == 1:
+            return partial[0]
+
+    return places[0] if len(places) == 1 else None
+
+
 class AssistantService:
     def __init__(
         self,
@@ -484,6 +715,8 @@ class AssistantService:
         embedding_model: str = "bge-m3",
         evidence_retriever: EvidenceRetriever | None = None,
         evidence_limit: int = 8,
+        weather_tool: WeatherTool | None = None,
+        official_site_tool: OfficialSiteTool | None = None,
     ) -> None:
         # ``model`` remains as a compatibility path for tests and external code
         # written before model routing was introduced. Production configuration
@@ -500,6 +733,47 @@ class AssistantService:
         self.embedding_model = embedding_model
         self.evidence_retriever = evidence_retriever
         self.evidence_limit = evidence_limit
+        self.weather_tool = weather_tool
+        self.official_site_tool = official_site_tool
+
+    def _live_answer(
+        self,
+        request: AssistantChatRequest,
+        intent: DiscoveryIntent,
+        *,
+        tool_name: str,
+        evidence: dict[str, Any],
+        facts: dict[str, Any],
+        official_text: str | None = None,
+        must_abstain: bool = False,
+    ) -> str | None:
+        try:
+            response_call = self.provider.generate_structured(
+                model=self.response_model,
+                system_prompt=TOOL_RESPONSE_SYSTEM_PROMPT,
+                user_prompt=_tool_prompt(
+                    request,
+                    intent,
+                    tool_name=tool_name,
+                    evidence=evidence,
+                ),
+                output_schema=ToolGroundedResponse,
+            )
+            grounded = ToolGroundedResponse.model_validate(response_call.output)
+            _validate_tool_grounding(
+                grounded,
+                facts=facts,
+                official_text=official_text,
+                must_abstain=must_abstain,
+            )
+            return _sanitize_user_text(grounded.answer)
+        except Exception as error:
+            logger.warning(
+                "Assistant live-tool grounding failed for %s: %s",
+                tool_name,
+                type(error).__name__,
+            )
+            return None
 
     def respond(
         self,
@@ -538,15 +812,22 @@ class AssistantService:
                 )
                 raw_candidate = RawDiscoveryIntent.model_validate(raw_payload)
                 raw_categories = _canonical_model_categories(raw_candidate.categories)
-                if explicit_categories and not set(explicit_categories).intersection(
-                    raw_categories
+                requires_explicit_category_match = not raw_candidate.tool_intent.startswith(
+                    "official_"
+                )
+                if (
+                    requires_explicit_category_match
+                    and explicit_categories
+                    and not set(explicit_categories).intersection(raw_categories)
                 ):
                     raise IntentValidationError(
                         "The model omitted an explicitly named supported category."
                     )
                 candidate = normalize_discovery_intent(request, raw_candidate)
-                if explicit_categories and not set(explicit_categories).intersection(
-                    candidate.categories
+                if (
+                    requires_explicit_category_match
+                    and explicit_categories
+                    and not set(explicit_categories).intersection(candidate.categories)
                 ):
                     raise IntentValidationError(
                         "The model omitted an explicitly named supported category."
@@ -590,6 +871,51 @@ class AssistantService:
                 warnings=warnings,
             )
 
+        if intent.tool_intent == "weather":
+            weather_tool = self.weather_tool
+            if weather_tool is None:
+                from app.tools.weather import get_weather
+
+                weather_tool = get_weather
+            try:
+                weather = weather_tool(
+                    WeatherRequest(
+                        city=intent.city,
+                        forecast_hours=intent.forecast_hours,
+                        latitude=request.latitude,
+                        longitude=request.longitude,
+                    )
+                )
+                answer = self._live_answer(
+                    request,
+                    intent,
+                    tool_name="get_weather",
+                    evidence=weather.model_dump(mode="json"),
+                    facts=_weather_claims(weather),
+                )
+                if answer is not None:
+                    return AssistantChatResponse(
+                        answer=answer,
+                        intent=intent,
+                        recommendations=[],
+                        grounded=True,
+                        provider_status="available",
+                        warnings=warnings,
+                    )
+            except Exception as error:
+                logger.warning(
+                    "Assistant weather tool failed: %s", type(error).__name__
+                )
+            warnings.append(fallback_text(request.language, "live_tool_unavailable"))
+            return AssistantChatResponse(
+                answer=fallback_text(request.language, "live_tool_unavailable"),
+                intent=intent,
+                recommendations=[],
+                grounded=True,
+                provider_status="fallback",
+                warnings=warnings,
+            )
+
         if intent.nearby and request.latitude is None:
             return AssistantChatResponse(
                 answer=fallback_text(request.language, "location_required"),
@@ -608,13 +934,18 @@ class AssistantService:
 
         contextual_follow_up = bool(
             request.context_place_ids
-            and (model_refers_to_context or _refers_to_previous_places(request.message))
+            and (
+                model_refers_to_context
+                or _refers_to_previous_places(request.message)
+                or intent.tool_intent.startswith("official_")
+            )
         )
         use_semantic_retrieval = bool(
             self.embedding_provider is not None
             and (
                 model_needs_semantic_retrieval
                 or contextual_follow_up
+                or intent.tool_intent.startswith("official_")
                 or not explicit_categories
             )
         )
@@ -683,6 +1014,109 @@ class AssistantService:
             )
         retrieved_ids = {place.place.id for place in places}
         evidence = [item for item in evidence if item.place_id in retrieved_ids]
+
+        if intent.tool_intent.startswith("official_"):
+            target = _select_official_target(
+                places,
+                target_name=intent.target_place_name,
+                context_place_ids=request.context_place_ids,
+            )
+            if target is None:
+                warnings.append(fallback_text(request.language, "live_tool_unavailable"))
+                return AssistantChatResponse(
+                    answer=fallback_text(request.language, "live_tool_unavailable"),
+                    intent=intent,
+                    recommendations=[],
+                    grounded=True,
+                    provider_status="fallback",
+                    warnings=warnings,
+                )
+
+            official_site_tool = self.official_site_tool
+            if official_site_tool is None:
+                from app.tools.official_site import get_official_place_page
+
+                official_site_tool = get_official_place_page
+            page_type = _official_page_type(intent.tool_intent)
+            try:
+                live_evidence = official_site_tool(
+                    database,
+                    place_id=target.place.id,
+                    page_type=page_type,
+                    query=request.message,
+                )
+                full_payload = live_evidence.model_dump(mode="json")
+                relevant_text = _relevant_official_excerpt(
+                    live_evidence.text,
+                    message=request.message,
+                    page_type=page_type,
+                )
+                time_facts = _city_time_facts(intent)
+                live_payload = {
+                    key: full_payload[key]
+                    for key in (
+                        "place_name",
+                        "page_type",
+                        "official_host",
+                        "source_url",
+                        "fetched_at",
+                        "verified",
+                        "reason",
+                        "title",
+                        "truncated",
+                    )
+                }
+                live_payload["relevant_text"] = relevant_text
+                live_payload.update(time_facts)
+                live_facts = {
+                    key: live_payload[key]
+                    for key in live_payload
+                    if key != "relevant_text"
+                }
+                answer = self._live_answer(
+                    request,
+                    intent,
+                    tool_name="get_official_place_page",
+                    evidence=live_payload,
+                    facts=live_facts,
+                    official_text=relevant_text,
+                    must_abstain=(not live_evidence.verified or not relevant_text),
+                )
+                if answer is not None:
+                    return AssistantChatResponse(
+                        answer=answer,
+                        intent=intent,
+                        recommendations=[
+                            AssistantRecommendation(
+                                place=target.place,
+                                reason=_fallback_reason(target, request.language),
+                                distance_km=target.distance_km,
+                            )
+                        ],
+                        grounded=True,
+                        provider_status="available",
+                        warnings=warnings,
+                    )
+            except Exception as error:
+                logger.warning(
+                    "Assistant official-site tool failed: %s", type(error).__name__
+                )
+
+            warnings.append(fallback_text(request.language, "live_tool_unavailable"))
+            return AssistantChatResponse(
+                answer=fallback_text(request.language, "live_tool_unavailable"),
+                intent=intent,
+                recommendations=[
+                    AssistantRecommendation(
+                        place=target.place,
+                        reason=_fallback_reason(target, request.language),
+                        distance_km=target.distance_km,
+                    )
+                ],
+                grounded=True,
+                provider_status="fallback",
+                warnings=warnings,
+            )
 
         if "live_opening_status" in intent.unsupported_constraints:
             warnings.append(fallback_text(request.language, "opening_unavailable"))

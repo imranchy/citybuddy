@@ -60,6 +60,7 @@ def get_place_details(
 def get_official_place_page(
     place_id: Annotated[int, Field(gt=0)],
     page_type: OfficialPageType = "general",
+    query: Annotated[str | None, Field(max_length=300)] = None,
 ) -> OfficialSiteEvidence:
     """Fetch bounded live text from a reviewed place's stored official website only."""
 
@@ -68,6 +69,7 @@ def get_official_place_page(
             database,
             place_id=place_id,
             page_type=page_type,
+            query=query,
         )
 
 

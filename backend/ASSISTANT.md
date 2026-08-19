@@ -8,19 +8,22 @@ database credentials, or unrestricted tool access.
 
 ```text
 POST /api/assistant/chat
-  -> structured intent extraction (small routed model)
-  -> deterministic capability and location checks
-  -> controlled SQLAlchemy/PostGIS retrieval
-  -> grounded place selection (response model)
-  -> exact place-ID and claim validation
-  -> deterministic response rendering
+  -> structured intent + bounded tool-intent extraction (small routed model)
+  -> deterministic city/category/location validation
+  -> one bounded branch:
+       discovery -> controlled SQLAlchemy/PostGIS + RAG retrieval
+       weather -> typed CityBuddy weather tool
+       official live info -> reviewed place resolution -> typed official-site tool
+  -> grounded response generation (response model)
+  -> exact place/tool-claim validation
+  -> deterministic response rendering/fallback
 ```
 
 The intent model interprets the request and the response model selects and
 explains retrieved candidates. Application
 code owns category validation, city support, geographic filters, limits,
 database access, factual validation, transport URLs, and safety disclaimers.
-The final answer and reasons are rendered from validated database facts rather
+The final answer and reasons are rendered from validated database or bounded live-tool facts rather
 than returning unrestricted model prose.
 
 Before retrieval, application code re-validates language selection, supported
@@ -28,6 +31,33 @@ city, explicit result counts, proximity/radius behavior, transport intent, and
 unsupported/live-fact flags. Model-produced precautionary flags that the user
 did not request are discarded, so they cannot create irrelevant warnings or
 change retrieval scope.
+
+## Bounded live-tool routing
+
+The intent schema exposes only these assistant-owned tool choices:
+
+- `discovery`
+- `weather`
+- `official_opening`
+- `official_menu`
+- `official_exhibitions`
+- `official_prices`
+
+Qwen may choose one of those semantic intents, but it never receives SQL, a URL,
+a database write, a shell, or an open-ended tool loop. CityBuddy application code
+constructs the validated tool arguments. Weather uses the supported city and optional
+validated coordinates. Official-site requests must first resolve to a reviewed
+CityBuddy place; the model cannot supply the place ID or website URL. A single
+conversation context place can be reused, otherwise the existing reviewed retrieval/RAG
+path supplies a bounded candidate set and CityBuddy resolves the named place from it.
+
+Live results are sent to the response model as bounded evidence. Non-abstaining
+weather answers must include exact claims copied from the serialized weather result.
+Official-site answers must include an exact supported field or a short exact excerpt
+from the retrieved official text. If the official-site retrieval is unverified or
+contains no readable static content, the response must abstain; validation rejects a
+confident current-fact answer. The selected UI language remains authoritative after
+tool execution.
 
 
 ## Grounded semantic evidence (Milestone A)
@@ -144,3 +174,23 @@ Synthetic evaluations may be traced to LangSmith explicitly. Production tracing
 must remain opt-in until retention, redaction, and sampling are configured for
 location-bearing user requests. Store production LangSmith service keys in the
 deployment secret store, never in an image or repository.
+
+## Bounded official-site question answering
+
+Place-specific live questions may use the reviewed place's stored official website. The
+assistant never receives arbitrary web access and neither the model nor caller can supply
+a URL. Application code resolves a reviewed place first, reads only its stored website,
+validates the official domain and public DNS target, follows only bounded same-domain
+links discovered from that page, strips executable/style content, and caps response size.
+
+Supported bounded routes include opening information, menus/dietary information,
+exhibitions, prices, and general official-place information such as shops/brands,
+collections, facilities, accessibility, services, parking and amenities. The user's
+question may rank already-extracted same-domain links but cannot authorize a URL.
+
+Before Gemma answers, CityBuddy selects a compact verbatim evidence window from the
+verified official page. Claims must match that evidence (allowing whitespace-only HTML
+layout differences). Today/now answers also receive the supported city's application-
+owned local date and weekday. If a page is unverified, dynamically rendered with no
+readable static content, or does not state the requested fact (for example halal status),
+the assistant must abstain rather than infer it.

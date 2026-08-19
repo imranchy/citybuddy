@@ -25,6 +25,17 @@ class RawDiscoveryIntent(BaseModel):
     needs_semantic_retrieval: bool = False
     language: str = "en"
     unsupported_constraints: list[str] = Field(default_factory=list, max_length=16)
+    tool_intent: Literal[
+        "discovery",
+        "weather",
+        "official_opening",
+        "official_menu",
+        "official_exhibitions",
+        "official_prices",
+        "official_info",
+    ] = "discovery"
+    target_place_name: str | None = Field(default=None, max_length=160)
+    forecast_hours: int = Field(default=12, ge=1, le=48)
 
     @field_validator("city")
     @classmethod
@@ -65,6 +76,17 @@ class DiscoveryIntent(BaseModel):
     radius_km: float | None = Field(default=None, ge=0.1, le=20.0)
     wants_transport: bool = False
     language: LanguageCode = "en"
+    tool_intent: Literal[
+        "discovery",
+        "weather",
+        "official_opening",
+        "official_menu",
+        "official_exhibitions",
+        "official_prices",
+        "official_info",
+    ] = "discovery"
+    target_place_name: str | None = Field(default=None, max_length=160)
+    forecast_hours: int = Field(default=12, ge=1, le=48)
     unsupported_constraints: list[
         Literal[
             "live_opening_status",
@@ -139,3 +161,22 @@ class GroundedResponse(BaseModel):
     claims: list[GroundedClaim] = Field(max_length=30)
     abstained: bool
     summary: str = Field(min_length=1, max_length=500)
+
+
+class ToolGroundedClaim(BaseModel):
+    """Machine-checkable support copied from bounded live-tool evidence."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    field: str = Field(min_length=1, max_length=80)
+    value: str | int | float | bool | None
+
+
+class ToolGroundedResponse(BaseModel):
+    """Grounded answer for weather or official-site tool evidence."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    answer: str = Field(min_length=1, max_length=1_000)
+    claims: list[ToolGroundedClaim] = Field(default_factory=list, max_length=20)
+    abstained: bool

@@ -34,6 +34,7 @@ _FALLBACK_COPY: dict[LanguageCode, dict[str, str]] = {
         "rating_unavailable": "CityBuddy cannot verify the requested external rating or award.",
         "context_unverified": "I could not verify a preference between those places.",
         "verified_filters": "CityBuddy used verified filters for these suggestions.",
+        "live_tool_unavailable": "I could not verify the requested live information right now.",
         "transit_disclaimer": "Open Google Maps for current public-transport directions. Routes, departure times, disruptions, and availability may change; verify the latest information before travelling.",
     },
     "it": {
@@ -52,6 +53,7 @@ _FALLBACK_COPY: dict[LanguageCode, dict[str, str]] = {
         "rating_unavailable": "CityBuddy non può verificare la valutazione o il premio esterno richiesto.",
         "context_unverified": "Non sono riuscito a verificare una preferenza tra questi luoghi.",
         "verified_filters": "CityBuddy ha usato filtri verificati per questi suggerimenti.",
+        "live_tool_unavailable": "Non sono riuscito a verificare in questo momento le informazioni aggiornate richieste.",
         "transit_disclaimer": "Apri Google Maps per indicazioni aggiornate con i mezzi pubblici. Percorsi, orari di partenza, interruzioni e disponibilità possono cambiare; verifica le informazioni più recenti prima di partire.",
     },
     "pt": {
@@ -70,6 +72,7 @@ _FALLBACK_COPY: dict[LanguageCode, dict[str, str]] = {
         "rating_unavailable": "O CityBuddy não consegue verificar a classificação ou distinção externa solicitada.",
         "context_unverified": "Não consegui verificar uma preferência entre esses lugares.",
         "verified_filters": "O CityBuddy usou filtros verificados para estas sugestões.",
+        "live_tool_unavailable": "Não consegui verificar agora as informações atuais solicitadas.",
         "transit_disclaimer": "Abra o Google Maps para obter direções atuais de transporte público. Rotas, horários de partida, interrupções e disponibilidade podem mudar; confirme as informações mais recentes antes de viajar.",
     },
     "de": {
@@ -88,6 +91,7 @@ _FALLBACK_COPY: dict[LanguageCode, dict[str, str]] = {
         "rating_unavailable": "CityBuddy kann die angeforderte externe Bewertung oder Auszeichnung nicht überprüfen.",
         "context_unverified": "Ich konnte keine Präferenz zwischen diesen Orten verifizieren.",
         "verified_filters": "CityBuddy hat für diese Vorschläge geprüfte Filter verwendet.",
+        "live_tool_unavailable": "Ich konnte die angeforderten aktuellen Informationen gerade nicht verifizieren.",
         "transit_disclaimer": "Öffne Google Maps für aktuelle Verbindungen mit öffentlichen Verkehrsmitteln. Routen, Abfahrtszeiten, Störungen und Verfügbarkeit können sich ändern; prüfe vor der Fahrt die neuesten Informationen.",
     },
     "bn": {
@@ -106,6 +110,7 @@ _FALLBACK_COPY: dict[LanguageCode, dict[str, str]] = {
         "rating_unavailable": "CityBuddy অনুরোধ করা বাহ্যিক রেটিং বা পুরস্কার যাচাই করতে পারে না।",
         "context_unverified": "এই জায়গাগুলোর মধ্যে কোনটি বেশি উপযুক্ত তা যাচাই করতে পারিনি।",
         "verified_filters": "CityBuddy এই পরামর্শগুলোর জন্য যাচাই করা ফিল্টার ব্যবহার করেছে।",
+        "live_tool_unavailable": "আমি এই মুহূর্তে অনুরোধ করা হালনাগাদ তথ্য যাচাই করতে পারিনি।",
         "transit_disclaimer": "হালনাগাদ গণপরিবহন নির্দেশনার জন্য Google Maps খুলুন। রুট, ছাড়ার সময়, বিঘ্ন এবং প্রাপ্যতা বদলাতে পারে; যাত্রার আগে সর্বশেষ তথ্য যাচাই করুন।",
     },
 }

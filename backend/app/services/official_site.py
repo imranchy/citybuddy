@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from html import unescape
 from html.parser import HTMLParser
 import ipaddress
+import re
 import socket
 from typing import Literal
 from urllib.parse import urljoin, urlsplit, urlunsplit
@@ -39,7 +40,11 @@ USER_AGENT = "CityBuddy/0.1 official-site-retriever"
 # official domain. A later bounded semantic ranker can replace these hints without
 # changing the network-security boundary.
 PAGE_HINTS: dict[OfficialPageType, tuple[str, ...]] = {
-    "general": (),
+    "general": (
+        "brand", "brands", "shop", "shops", "store", "stores", "collection",
+        "collections", "directory", "facility", "facilities", "service", "services",
+        "amenities", "accessibility", "parking", "negozi", "servizi", "parcheggio",
+    ),
     "menu": (
         "menu",
         "menus",
@@ -77,6 +82,8 @@ PAGE_HINTS: dict[OfficialPageType, tuple[str, ...]] = {
         "visita",
         "access",
         "apertura",
+        "aperto",
+        "chiuso",
     ),
 }
 
@@ -248,15 +255,24 @@ def _extract_page(content: str) -> _PageExtractor:
     return parser
 
 
+def _query_terms(query: str | None) -> tuple[str, ...]:
+    if not query:
+        return ()
+    words = re.findall(r"[\wÀ-ÿ]+", query.casefold(), flags=re.UNICODE)
+    return tuple(dict.fromkeys(word for word in words if len(word) >= 3))[:24]
+
+
 def _choose_same_domain_link(
     parser: _PageExtractor,
     *,
     base_url: str,
     page_type: OfficialPageType,
     official_host: str,
+    query: str | None = None,
 ) -> str | None:
     hints = PAGE_HINTS[page_type]
-    if not hints:
+    query_terms = _query_terms(query)
+    if not hints and not query_terms:
         return None
 
     candidates: list[tuple[int, int, str]] = []
@@ -273,7 +289,9 @@ def _choose_same_domain_link(
             continue
         seen.add(absolute)
         haystack = f"{parsed.path} {parsed.query} {anchor_text}".casefold()
-        score = sum(1 for hint in hints if hint in haystack)
+        hint_score = sum(3 for hint in hints if hint in haystack)
+        query_score = sum(2 for term in query_terms if term in haystack)
+        score = hint_score + query_score
         if score:
             candidates.append((-score, index, absolute))
 
@@ -372,6 +390,7 @@ def fetch_official_site(
     place_name: str,
     website: str,
     page_type: OfficialPageType,
+    query: str | None = None,
     client: httpx.Client | None = None,
     resolver: Callable[[str, int], set[str]] = _default_resolver,
 ) -> OfficialSiteEvidence:
@@ -397,6 +416,7 @@ def fetch_official_site(
             base_url=source_url,
             page_type=page_type,
             official_host=official_host,
+            query=query,
         )
         if selected is not None and selected != source_url:
             source_url, content, selected_truncated = _request_page(

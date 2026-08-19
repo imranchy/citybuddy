@@ -1,13 +1,21 @@
 import unittest
+from datetime import datetime, timezone
 
 from app.core.maps import GOOGLE_MAPS_TRANSIT_DISCLAIMER
 from app.llm.base import LLMCallResult
-from app.llm.schemas import DiscoveryIntent, GroundedResponse, RawDiscoveryIntent
+from app.llm.schemas import (
+    DiscoveryIntent,
+    GroundedResponse,
+    RawDiscoveryIntent,
+    ToolGroundedResponse,
+)
 from app.schemas.assistant import AssistantChatRequest
 from app.schemas.place import PlaceRead
 from app.services.assistant import AssistantService
 from app.services.place_types import RetrievedPlace
 from app.services.rag import RetrievedEvidence
+from app.services.official_site import OfficialSiteEvidence
+from app.services.weather import WeatherForecast, WeatherPoint
 
 
 def place(place_id: int = 10) -> RetrievedPlace:
@@ -91,6 +99,61 @@ def intent(**updates) -> DiscoveryIntent:
     values.update(updates)
     return DiscoveryIntent.model_validate(values)
 
+
+
+
+def tool_answer(
+    answer: str,
+    *,
+    field: str | None = None,
+    value=None,
+    abstained: bool = False,
+) -> ToolGroundedResponse:
+    claims = [] if field is None else [{"field": field, "value": value}]
+    return ToolGroundedResponse.model_validate(
+        {"answer": answer, "claims": claims, "abstained": abstained}
+    )
+
+
+def weather_forecast() -> WeatherForecast:
+    now = datetime(2026, 8, 19, 9, 0, tzinfo=timezone.utc)
+    return WeatherForecast(
+        city="Torino",
+        latitude=45.0703,
+        longitude=7.6869,
+        timezone="Europe/Rome",
+        forecast_hours=12,
+        fetched_at=now,
+        source_updated_at=now,
+        source="MET Norway Locationforecast",
+        attribution="Data from MET Norway",
+        license="NLOD 2.0 / CC BY 4.0",
+        current=WeatherPoint(
+            time=now,
+            air_temperature_c=24.5,
+            relative_humidity_percent=45.0,
+            wind_speed_mps=2.0,
+            precipitation_amount_mm=0.0,
+            symbol_code="clearsky_day",
+        ),
+        forecast=[],
+    )
+
+
+def official_evidence(*, verified: bool = True) -> OfficialSiteEvidence:
+    return OfficialSiteEvidence(
+        place_id=10,
+        place_name="Museo Test",
+        page_type="opening_info",
+        official_host="example.org",
+        source_url="https://example.org/visit",
+        fetched_at=datetime(2026, 8, 19, 9, 0, tzinfo=timezone.utc),
+        verified=verified,
+        reason=None if verified else "no_readable_static_content",
+        title="Visit",
+        text="Open Tuesday to Sunday from 10:00 to 18:00." if verified else None,
+        truncated=False,
+    )
 
 def grounded(
     place_id: int = 10,
@@ -846,6 +909,271 @@ class AssistantServiceTests(unittest.TestCase):
         )
 
         self.assertIsNone(retriever.calls[0]["place_ids"])
+
+    def test_weather_intent_routes_to_weather_tool_without_place_retrieval(self) -> None:
+        calls = []
+
+        def fake_weather(request):
+            calls.append(request)
+            return weather_forecast()
+
+        retriever = RecordingRetriever([place()])
+        service = AssistantService(
+            provider=SequenceProvider([
+                RawDiscoveryIntent(tool_intent="weather", city="turin"),
+                tool_answer(
+                    "It is 24.5°C in Torino.",
+                    field="current.air_temperature_c",
+                    value=24.5,
+                ),
+            ]),
+            model="fake",
+            retriever=retriever,
+            weather_tool=fake_weather,
+        )
+
+        response = service.respond(
+            object(), AssistantChatRequest(message="What's the weather in Turin?")
+        )
+
+        self.assertEqual(response.intent.tool_intent, "weather")
+        self.assertEqual(response.answer, "It is 24.5°C in Torino.")
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(retriever.calls, [])
+
+    def test_official_opening_routes_to_reviewed_place_then_official_tool(self) -> None:
+        calls = []
+
+        def fake_official(database, **kwargs):
+            calls.append(kwargs)
+            return official_evidence()
+
+        service = AssistantService(
+            provider=SequenceProvider([
+                RawDiscoveryIntent(
+                    categories=["museum"],
+                    tool_intent="official_opening",
+                    target_place_name="Museo Test",
+                ),
+                tool_answer(
+                    "The official page says it is open Tuesday to Sunday from 10:00 to 18:00.",
+                    field="text_excerpt",
+                    value="Open Tuesday to Sunday from 10:00 to 18:00.",
+                ),
+            ]),
+            model="fake",
+            retriever=RecordingRetriever([place()]),
+            official_site_tool=fake_official,
+        )
+
+        response = service.respond(
+            object(), AssistantChatRequest(message="Is Museo Test open today?")
+        )
+
+        self.assertEqual(response.intent.tool_intent, "official_opening")
+        self.assertNotIn("live_opening_status", response.intent.unsupported_constraints)
+        self.assertEqual(
+            calls,
+            [{
+                "place_id": 10,
+                "page_type": "opening_info",
+                "query": "Is Museo Test open today?",
+            }],
+        )
+        self.assertEqual(response.recommendations[0].place.id, 10)
+
+
+    def test_menu_intent_routes_to_official_menu_page(self) -> None:
+        calls = []
+
+        def fake_official(database, **kwargs):
+            calls.append(kwargs)
+            evidence = official_evidence()
+            return evidence.model_copy(
+                update={
+                    "page_type": "menu",
+                    "text": "Lunch menu: pasta and salad.",
+                }
+            )
+
+        service = AssistantService(
+            provider=SequenceProvider([
+                RawDiscoveryIntent(
+                    categories=["museum"],
+                    tool_intent="official_menu",
+                    target_place_name="Museo Test",
+                ),
+                tool_answer(
+                    "The official menu lists pasta and salad.",
+                    field="text_excerpt",
+                    value="Lunch menu: pasta and salad.",
+                ),
+            ]),
+            model="fake",
+            retriever=RecordingRetriever([place()]),
+            official_site_tool=fake_official,
+        )
+
+        response = service.respond(
+            object(), AssistantChatRequest(message="Does Museo Test have a menu?")
+        )
+
+        self.assertEqual(response.intent.tool_intent, "official_menu")
+        self.assertEqual(
+            calls,
+            [{
+                "place_id": 10,
+                "page_type": "menu",
+                "query": "Does Museo Test have a menu?",
+            }],
+        )
+        self.assertIn("pasta", response.answer)
+
+    def test_official_grounding_accepts_whitespace_normalized_excerpt(self) -> None:
+        def fake_official(database, **kwargs):
+            evidence = official_evidence()
+            return evidence.model_copy(
+                update={
+                    "text": "Aperto dal giovedì al martedì 9.00-19.00\nultimo ingresso alle ore 18.00\nCHIUSO\nil mercoledì",
+                }
+            )
+
+        service = AssistantService(
+            provider=SequenceProvider([
+                RawDiscoveryIntent(
+                    categories=["museum"],
+                    tool_intent="official_opening",
+                    target_place_name="Museo Test",
+                ),
+                tool_answer(
+                    "The official page says the museum is closed on Wednesday.",
+                    field="text_excerpt",
+                    value="CHIUSO il mercoledì",
+                ),
+            ]),
+            model="fake",
+            retriever=RecordingRetriever([place()]),
+            official_site_tool=fake_official,
+        )
+
+        response = service.respond(
+            object(), AssistantChatRequest(message="Is Museo Test open today?")
+        )
+
+        self.assertEqual(response.provider_status, "available")
+        self.assertIn("closed", response.answer)
+
+    def test_generic_official_info_routes_to_reviewed_site_with_user_query(self) -> None:
+        calls = []
+
+        def fake_official(database, **kwargs):
+            calls.append(kwargs)
+            evidence = official_evidence()
+            return evidence.model_copy(
+                update={
+                    "page_type": "general",
+                    "text": "Fashion directory: men, women and kids collections.",
+                }
+            )
+
+        service = AssistantService(
+            provider=SequenceProvider([
+                RawDiscoveryIntent(
+                    tool_intent="official_info",
+                    target_place_name="Museo Test",
+                ),
+                tool_answer(
+                    "The official site lists men, women and kids collections.",
+                    field="text_excerpt",
+                    value="Fashion directory: men, women and kids collections.",
+                ),
+            ]),
+            model="fake",
+            retriever=RecordingRetriever([place()]),
+            official_site_tool=fake_official,
+        )
+
+        question = "What men's, women's and kids collections are there at Museo Test?"
+        response = service.respond(object(), AssistantChatRequest(message=question))
+
+        self.assertEqual(response.intent.tool_intent, "official_info")
+        self.assertEqual(
+            calls,
+            [{"place_id": 10, "page_type": "general", "query": question}],
+        )
+        self.assertEqual(response.provider_status, "available")
+
+    def test_unverified_official_site_requires_abstention(self) -> None:
+        service = AssistantService(
+            provider=SequenceProvider([
+                RawDiscoveryIntent(
+                    categories=["museum"],
+                    tool_intent="official_opening",
+                    target_place_name="Museo Test",
+                ),
+                tool_answer(
+                    "I could not verify the current opening information.",
+                    abstained=True,
+                ),
+            ]),
+            model="fake",
+            retriever=RecordingRetriever([place()]),
+            official_site_tool=lambda database, **kwargs: official_evidence(verified=False),
+        )
+
+        response = service.respond(
+            object(), AssistantChatRequest(message="Is Museo Test open today?")
+        )
+
+        self.assertEqual(response.provider_status, "available")
+        self.assertIn("could not verify", response.answer)
+
+    def test_ordinary_discovery_does_not_call_live_tools(self) -> None:
+        def unexpected(*args, **kwargs):
+            raise AssertionError("live tool should not be called")
+
+        service = AssistantService(
+            provider=SequenceProvider([
+                RawDiscoveryIntent(categories=["museum"], tool_intent="discovery"),
+                grounded(),
+            ]),
+            model="fake",
+            retriever=RecordingRetriever([place()]),
+            weather_tool=unexpected,
+            official_site_tool=unexpected,
+        )
+
+        response = service.respond(
+            object(), AssistantChatRequest(message="Recommend a museum")
+        )
+
+        self.assertEqual(response.intent.tool_intent, "discovery")
+        self.assertEqual(len(response.recommendations), 1)
+
+    def test_selected_language_remains_authoritative_after_weather_tool(self) -> None:
+        service = AssistantService(
+            provider=SequenceProvider([
+                RawDiscoveryIntent(tool_intent="weather", city="turin", language="en"),
+                tool_answer(
+                    "A Torino ci sono 24,5 °C.",
+                    field="current.air_temperature_c",
+                    value=24.5,
+                ),
+            ]),
+            model="fake",
+            weather_tool=lambda request: weather_forecast(),
+        )
+
+        response = service.respond(
+            object(),
+            AssistantChatRequest(
+                message="What's the weather in Turin?",
+                language="it",
+            ),
+        )
+
+        self.assertEqual(response.intent.language, "it")
+        self.assertEqual(response.answer, "A Torino ci sono 24,5 °C.")
 
 
 if __name__ == "__main__":
