@@ -27,6 +27,12 @@ class Settings(BaseSettings):
     rag_enabled: bool = True
     rag_evidence_limit: int = 8
 
+    vllm_base_url: str | None = None
+    vllm_api_key: str | None = None
+    vllm_planner_model: str = "Qwen/Qwen3-0.6B"
+    vllm_response_model: str | None = None
+    vllm_timeout_seconds: float = 45.0
+
     model_config = SettingsConfigDict(
         env_file=BASE_DIR / ".env",
         env_file_encoding="utf-8",
