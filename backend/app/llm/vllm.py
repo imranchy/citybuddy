@@ -35,14 +35,21 @@ class VLLMProvider:
         output_schema: type[SchemaT],
     ) -> LLMCallResult:
         payload: dict[str, Any] = {
-            "model": model,
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-            "temperature": 0,
-            "max_tokens": 512,
-        }
+        "model": model,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        "temperature": 0,
+        "max_tokens": 512,
+        "response_format": {
+            "type": "json_schema",
+            "json_schema": {
+                "name": output_schema.__name__,
+                "schema": output_schema.model_json_schema(),
+            },
+        },
+    }
 
         headers = {
             "Authorization": f"Bearer {self.api_key}",
