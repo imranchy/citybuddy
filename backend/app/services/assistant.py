@@ -668,10 +668,11 @@ class AssistantService:
                 return plan, warnings, True
             except Exception as error:
                 last_error = error
-
+                
         logger.warning(
-            "Assistant semantic planning failed after retry: %s",
+            "Assistant semantic planning failed after retry: %s: %s",
             type(last_error).__name__ if last_error else "unknown",
+            str(last_error) if last_error else "no error details",
         )
         warnings.append(fallback_text(request.language, "model_unavailable"))
         return None, warnings, False

@@ -99,9 +99,20 @@ class VLLMProvider:
             json.JSONDecodeError,
             ValidationError,
         ) as error:
+            raw_response = ""
+
+            try:
+                if "content" in locals():
+                    raw_response = str(content)[:2000]
+                elif "response" in locals():
+                    raw_response = response.text[:2000]
+            except Exception:
+                raw_response = "<unable to read response>"
+
             raise VLLMError(
-                f"vLLM model '{model}' did not return valid structured output: "
-                f"{error}"
+                f"vLLM model '{model}' did not return valid structured output. "
+                f"Cause: {type(error).__name__}: {error}. "
+                f"Raw model content: {raw_response}"
             ) from error
 
         total_duration_ms = round(
