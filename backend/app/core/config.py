@@ -8,12 +8,11 @@ BASE_DIR = Path(__file__).resolve().parents[2]
 
 class Settings(BaseSettings):
     database_url: str | None = None
-
-    postgres_user: str
-    postgres_password: str
+    postgres_user: str | None = None
+    postgres_password: str | None = None
     postgres_host: str = "localhost"
     postgres_port: int = 5432
-    postgres_db: str
+    postgres_db: str | None = None
 
     ollama_base_url: str = "http://127.0.0.1:11434"
     ollama_planner_base_url: str | None = None
