@@ -11,8 +11,16 @@ frontend/out/
 
 # Environment variables and secrets
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
+backend/.env
+backend/.env.*
+!backend/.env.example
+.secrets/
+*.key
+*.pem
+*.p12
+*.pfx
 
 # Editors
 .vscode/

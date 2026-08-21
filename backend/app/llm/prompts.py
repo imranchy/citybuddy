@@ -134,6 +134,10 @@ Task planning:
   hotel/hostel; green outdoor space -> park/garden.
 - Each category entry has an optional quantity. Extract explicit quantities in ANY
   language. Do not invent a quantity when the user did not specify one.
+- Quantity preservation is mandatory: before returning the plan, re-check the CURRENT
+  user message for an explicit count attached to each requested category. If the user
+  asks for two museums, the museum category quantity must be 2; never silently fall
+  back to an unspecified/default quantity.
 - Keep multi-category quantities separate. "two museums and one park" means two
   category entries with quantities 2 and 1, not a global quantity of 2 or 3.
 - preferences contains meaningful qualitative constraints such as family-friendly,

@@ -261,42 +261,134 @@ def _claim_is_supported(claim: GroundedClaim, record: dict[str, Any]) -> bool:
     return claim.value == expected
 
 
-def _validate_grounded_response(
+def _normalize_grounded_response(
     response: GroundedResponse,
     places: list[RetrievedPlace],
     evidence: list[RetrievedEvidence],
     result_limit: int,
-) -> dict[int, list[GroundedClaim]]:
+) -> tuple[GroundedResponse, dict[int, list[GroundedClaim]], list[str]]:
+    """Repair harmless model mistakes while keeping grounding fail-closed.
+
+    Structural mistakes such as duplicate recommendations, excessive result counts,
+    unsupported claims, and bad evidence references are recoverable because the
+    application can deterministically remove them. A response is rejected only when
+    no usable retrieved recommendation remains or when it explicitly abstains without
+    providing a usable recommendation.
+    """
+
     records = {place.place.id: _record(place) for place in places}
-    recommendation_ids = [item.place_id for item in response.recommendations]
-    if len(recommendation_ids) != len(set(recommendation_ids)):
-        raise GroundingValidationError("The model returned duplicate place IDs.")
-    if len(recommendation_ids) > result_limit:
-        raise GroundingValidationError("The model exceeded the requested result limit.")
-    if not set(recommendation_ids).issubset(records):
-        raise GroundingValidationError("The model referenced an unretrieved place.")
-    if response.abstained and (response.recommendations or response.claims):
-        raise GroundingValidationError("An abstention contained recommendations.")
-    if not response.abstained and not response.recommendations:
-        raise GroundingValidationError("A non-abstention omitted recommendations.")
+    evidence_by_id = {item.id: item for item in evidence}
+    repairs: list[str] = []
+
+    normalized_recommendations = []
+    seen_place_ids: set[int] = set()
+    for recommendation in response.recommendations:
+        if recommendation.place_id not in records:
+            repairs.append("dropped_unretrieved_place")
+            continue
+        if recommendation.place_id in seen_place_ids:
+            repairs.append("deduplicated_place")
+            continue
+        seen_place_ids.add(recommendation.place_id)
+
+        valid_evidence_ids = [
+            evidence_id
+            for evidence_id in recommendation.evidence_ids
+            if evidence_id in evidence_by_id
+            and evidence_by_id[evidence_id].place_id == recommendation.place_id
+        ]
+        if valid_evidence_ids != recommendation.evidence_ids:
+            repairs.append("removed_invalid_evidence")
+
+        normalized_recommendations.append(
+            recommendation.model_copy(update={"evidence_ids": valid_evidence_ids})
+        )
+        if len(normalized_recommendations) >= result_limit:
+            if len(response.recommendations) > len(normalized_recommendations):
+                repairs.append("truncated_to_result_limit")
+            break
 
     claims_by_place: dict[int, list[GroundedClaim]] = {}
+    selected_ids = {item.place_id for item in normalized_recommendations}
     for claim in response.claims:
         record = records.get(claim.place_id)
-        if record is None or not _claim_is_supported(claim, record):
-            raise GroundingValidationError("The model returned an unsupported claim.")
+        if (
+            claim.place_id not in selected_ids
+            or record is None
+            or not _claim_is_supported(claim, record)
+        ):
+            repairs.append("removed_unsupported_claim")
+            continue
         claims_by_place.setdefault(claim.place_id, []).append(claim)
 
-    evidence_by_id = {item.id: item for item in evidence}
-    evidence_place_ids = {item.place_id for item in evidence}
-    for recommendation in response.recommendations:
-        if any(
-            evidence_id not in evidence_by_id
-            or evidence_by_id[evidence_id].place_id != recommendation.place_id
-            for evidence_id in recommendation.evidence_ids
-        ):
-            raise GroundingValidationError("A recommendation cited invalid evidence.")
-    return claims_by_place
+    if not normalized_recommendations:
+        if response.abstained:
+            return (
+                response.model_copy(update={"recommendations": [], "claims": []}),
+                {},
+                repairs,
+            )
+        raise GroundingValidationError(
+            "The model returned no usable recommendations from retrieved records."
+        )
+
+    if response.abstained:
+        repairs.append("ignored_inconsistent_abstention")
+
+    normalized_claims = [
+        claim
+        for claims in claims_by_place.values()
+        for claim in claims
+    ]
+    normalized = response.model_copy(
+        update={
+            "recommendations": normalized_recommendations,
+            "claims": normalized_claims,
+            "abstained": False,
+        }
+    )
+    return normalized, claims_by_place, list(dict.fromkeys(repairs))
+
+
+def _repair_category_quota_selection(
+    recommendation_ids: list[int],
+    places: list[RetrievedPlace],
+    category_quotas: dict[str, int],
+    result_limit: int,
+) -> tuple[list[int], bool]:
+    """Preserve valid model ranking, then fill quota shortfalls deterministically."""
+
+    by_id = {item.place.id: item for item in places}
+    selected: list[int] = []
+    counts = {category: 0 for category in category_quotas}
+
+    for place_id in recommendation_ids:
+        place = by_id.get(place_id)
+        if place is None:
+            continue
+        category = place.place.category
+        if category in counts and counts[category] >= category_quotas[category]:
+            continue
+        selected.append(place_id)
+        if category in counts:
+            counts[category] += 1
+        if len(selected) >= result_limit:
+            break
+
+    repaired = selected != recommendation_ids[:result_limit]
+    for category, quota in category_quotas.items():
+        if counts[category] >= quota:
+            continue
+        for place in places:
+            if place.place.category != category or place.place.id in selected:
+                continue
+            selected.append(place.place.id)
+            counts[category] += 1
+            repaired = True
+            if counts[category] >= quota or len(selected) >= result_limit:
+                break
+
+    return selected[:result_limit], repaired
 
 
 def _fact_reason(
@@ -1219,32 +1311,36 @@ class AssistantService:
                     output_schema=GroundedResponse,
                 )
                 grounded = GroundedResponse.model_validate(response_call.output)
-                claims_by_place = _validate_grounded_response(
+                grounded, claims_by_place, grounding_repairs = _normalize_grounded_response(
                     grounded, places, evidence, intent.limit
                 )
+                selected_ids = [item.place_id for item in grounded.recommendations]
                 if use_category_quotas:
-                    selected_records = {item.place.id: item for item in places}
-                    returned_counts = {category: 0 for category in category_quotas}
-                    for recommendation in grounded.recommendations:
-                        category = selected_records[recommendation.place_id].place.category
-                        if category in returned_counts:
-                            returned_counts[category] += 1
-                    if any(
-                        returned_counts[category] < category_quotas[category]
-                        for category in category_quotas
-                    ):
-                        raise GroundingValidationError(
-                            "The model did not preserve explicit per-category quotas."
-                        )
+                    selected_ids, quota_repaired = _repair_category_quota_selection(
+                        selected_ids, places, category_quotas, intent.limit
+                    )
+                    if quota_repaired:
+                        grounding_repairs.append("repaired_category_quotas")
                 selected_by_id = {place.place.id: place for place in places}
-                selected = [
-                    selected_by_id[item.place_id]
-                    for item in grounded.recommendations
-                ]
-                reasons_by_place = {
-                    item.place_id: _sanitize_user_text(item.reason) for item in grounded.recommendations
-                }
-                conversational_answer = _sanitize_user_text(grounded.summary)
+                selected = [selected_by_id[place_id] for place_id in selected_ids]
+                if grounding_repairs:
+                    logger.info(
+                        "Assistant grounding response repaired: %s",
+                        ",".join(dict.fromkeys(grounding_repairs)),
+                    )
+                    # Once any model content needed repair, keep the selected IDs but
+                    # fall back to application-owned copy for user-visible text. This
+                    # prevents a dropped claim/recommendation from surviving indirectly
+                    # in a free-form reason or summary.
+                    reasons_by_place = {}
+                    conversational_answer = None
+                else:
+                    reasons_by_place = {
+                        item.place_id: _sanitize_user_text(item.reason)
+                        for item in grounded.recommendations
+                        if item.place_id in selected_ids
+                    }
+                    conversational_answer = _sanitize_user_text(grounded.summary)
             except Exception as error:
                 logger.warning(
                     "Assistant grounding validation failed: %s: %s",

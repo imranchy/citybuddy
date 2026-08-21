@@ -248,6 +248,65 @@ class AssistantServiceTests(unittest.TestCase):
         self.assertEqual(response.intent.category_limits, {"museum": 2, "park": 1})
         self.assertEqual([r.place.category for r in response.recommendations], ["museum", "museum", "park"])
 
+    def test_grounding_repairs_duplicate_and_unretrieved_recommendations(self):
+        p = plan(tasks=[discovery_task(query="Two museums", quantity=2)])
+        retriever = SmartRetriever([place(10), place(11, "Museum Zwei")])
+        malformed = GroundedResponse.model_validate(
+            {
+                "recommendations": [
+                    {"place_id": 10, "reason": "First.", "evidence_ids": []},
+                    {"place_id": 10, "reason": "Duplicate.", "evidence_ids": []},
+                    {"place_id": 999, "reason": "Unknown.", "evidence_ids": []},
+                    {"place_id": 11, "reason": "Second.", "evidence_ids": []},
+                ],
+                "claims": [],
+                "abstained": False,
+                "summary": "Model summary that should be discarded after repair.",
+            }
+        )
+        response = self.service([p], [malformed], retriever=retriever).respond(
+            object(), AssistantChatRequest(message="Two museums")
+        )
+        self.assertEqual(response.provider_status, "available")
+        self.assertEqual([item.place.id for item in response.recommendations], [10, 11])
+        self.assertNotEqual(response.answer, malformed.summary)
+
+    def test_grounding_repairs_unsupported_claim_without_discarding_selection(self):
+        p = plan(tasks=[discovery_task(query="One museum", quantity=1)])
+        malformed = GroundedResponse.model_validate(
+            {
+                "recommendations": [
+                    {"place_id": 10, "reason": "Grounded choice.", "evidence_ids": []}
+                ],
+                "claims": [
+                    {"place_id": 10, "field": "rating", "value": 5.0}
+                ],
+                "abstained": False,
+                "summary": "It has a five-star rating.",
+            }
+        )
+        response = self.service([p], [malformed]).respond(
+            object(), AssistantChatRequest(message="One museum")
+        )
+        self.assertEqual(response.provider_status, "available")
+        self.assertEqual([item.place.id for item in response.recommendations], [10])
+        self.assertNotIn("five-star", response.answer.casefold())
+
+    def test_category_quota_shortfall_is_filled_from_retrieved_places(self):
+        task = discovery_task(query="Two museums and one park", category=None)
+        task["categories"] = [
+            {"category": "museum", "quantity": 2},
+            {"category": "park", "quantity": 1},
+        ]
+        p = plan(tasks=[task])
+        retriever = SmartRetriever([place(10), place(11, "Museum Zwei"), place(20, "Parco Test", "park")])
+        incomplete = grounded([10], "Only one model-selected result.")
+        response = self.service([p], [incomplete], retriever=retriever).respond(
+            object(), AssistantChatRequest(message="Two museums and one park")
+        )
+        self.assertEqual(response.provider_status, "available")
+        self.assertEqual([r.place.category for r in response.recommendations], ["museum", "museum", "park"])
+
     def test_preferences_trigger_semantic_embedding(self):
         task = discovery_task(query="A quiet museum", quantity=1, preferences=["quiet", "indoors"])
         p = plan(tasks=[task])
