@@ -1247,8 +1247,9 @@ class AssistantService:
                 conversational_answer = _sanitize_user_text(grounded.summary)
             except Exception as error:
                 logger.warning(
-                    "Assistant grounding validation failed: %s",
+                    "Assistant grounding validation failed: %s: %s",
                     type(error).__name__,
+                    str(error),
                 )
                 provider_available = False
                 warnings.append(
