@@ -12,7 +12,7 @@ def main() -> None:
     parser.add_argument(
         "--dataset",
         type=Path,
-        default=Path("evaluation_datasets/conversations-v1.json"),
+        default=Path("evaluation/datasets/legacy/conversations-v1.json"),
     )
     arguments = parser.parse_args()
     load_dotenv()

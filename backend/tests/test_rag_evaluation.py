@@ -21,7 +21,7 @@ class FakeEmbeddingProvider:
 class RagEvaluationTests(unittest.TestCase):
     def test_v2_dataset_covers_every_leaf_category_in_both_languages(self) -> None:
         dataset = json.loads(
-            Path("evaluation_datasets/rag-v2.json").read_text(encoding="utf-8")
+            Path("evaluation/datasets/legacy/rag-v2.json").read_text(encoding="utf-8")
         )
         document_ids = {item["id"] for item in dataset["documents"]}
         self.assertEqual(document_ids, set(DESTINATION_CATEGORIES))

@@ -6,7 +6,7 @@ from typing import Any
 
 from dotenv import load_dotenv
 
-from app.llm.intent_evaluation import evaluate_intent_model
+from app.llm.intent_evaluation import DEFAULT_PLANNER_DATASET, evaluate_intent_model
 from app.core.config import settings
 from app.llm.vllm import VLLMProvider
 from app.llm.tracing import TraceConfig
@@ -27,14 +27,15 @@ def parse_arguments() -> argparse.Namespace:
     )
     parser.add_argument("--vllm-url", default=settings.vllm_base_url)
     parser.add_argument("--timeout", type=float, default=120.0)
-    parser.add_argument("--output-dir", type=Path, default=Path("artifacts"))
+    parser.add_argument("--dataset", type=Path, default=DEFAULT_PLANNER_DATASET)
+    parser.add_argument("--output-dir", type=Path, default=Path("evaluation/results/planner"))
     parser.add_argument("--langsmith", action="store_true")
     parser.add_argument("--langsmith-project")
     parser.add_argument(
         "--suite",
-        choices=("smoke", "full"),
-        default="full",
-        help="Intent evaluation suite to run. Default: full.",
+        choices=("smoke", "production", "all"),
+        default="production",
+        help="Planner benchmark suite. Production scores only cases supported by the current contract; all also records skipped contract-mismatch cases.",
     )
     return parser.parse_args()
 
@@ -61,6 +62,11 @@ def markdown_report(report: dict[str, Any]) -> str:
     for result in report["models"]:
         lines.extend(["", f"## {result['model']}", ""])
         for case in result["cases"]:
+            if case.get("skipped"):
+                lines.append(
+                    f"- SKIP `{case['key']}` — {case.get('skip_reason', 'not scored')}"
+                )
+                continue
             marker = "PASS" if case["passed"] else "FAIL"
             detail = case.get("error")
             if detail is None:
@@ -98,6 +104,7 @@ def main() -> None:
             model=model,
             trace_config=trace_config,
             suite=arguments.suite,
+            dataset_path=arguments.dataset,
         )
         results.append(result)
         print(
@@ -111,6 +118,7 @@ def main() -> None:
     report = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "suite": arguments.suite,
+        "dataset": str(arguments.dataset),
         "vllm_url": arguments.vllm_url,
         "langsmith": {
             "enabled": trace_config.enabled,

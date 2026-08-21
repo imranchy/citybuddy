@@ -101,6 +101,7 @@ Automated tests use fake providers and HTTP mock transport and do not require a 
 python -m unittest discover -s tests -v
 ```
 
-Versioned evaluation datasets remain under `evaluation_datasets`. Generated reports remain
-local under `artifacts` unless a reviewed baseline is deliberately copied into
-`evaluation_results`.
+Versioned evaluation datasets live under `evaluation/datasets`. The frozen production v1 suites
+are under `evaluation/datasets/v1`; historical fixtures remain under `evaluation/datasets/legacy`.
+Generated planner and capability reports are written under `evaluation/results/planner` and
+`evaluation/results/capability`; reviewed historical baselines remain under `evaluation/results/legacy`.

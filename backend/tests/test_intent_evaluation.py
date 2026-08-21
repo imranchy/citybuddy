@@ -1,10 +1,11 @@
+import json
 import unittest
 
+from app.core.languages import SUPPORTED_LANGUAGE_CODES
 from app.llm.base import LLMCallResult
-from app.llm.evaluation import IntentCase
 from app.llm.intent_evaluation import (
-    INTENT_EVALUATION_CASES,
-    CategoryIntentCase,
+    PLANNER_INTENT_CASES,
+    PlannerIntentCase,
     evaluate_intent_model,
     intent_cases_for_suite,
 )
@@ -12,48 +13,35 @@ from app.llm.schemas import SemanticPlan
 
 
 class PassingIntentProvider:
-    def __init__(self) -> None:
-        self.cases = iter(INTENT_EVALUATION_CASES)
+    def __init__(self, cases=None) -> None:
+        self.cases = iter(cases or intent_cases_for_suite("production"))
         self.user_prompts = []
 
     def generate_structured(self, **kwargs) -> LLMCallResult:
         self.user_prompts.append(kwargs["user_prompt"])
-        case = next(self.cases)
-        if isinstance(case, CategoryIntentCase):
-            categories = [{"category": case.category, "quantity": None}]
-            city = "turin"
-            nearby = False
-            radius_km = None
-            wants_transport = False
-            task_type = "discovery"
-        else:
-            assert isinstance(case, IntentCase)
-            quantity = case.limit if len(case.categories) == 1 and case.limit != 5 else None
-            categories = [
-                {"category": category, "quantity": quantity}
-                for category in case.categories
-            ]
-            city = case.city
-            nearby = case.nearby
-            radius_km = case.radius_km
-            wants_transport = case.wants_transport
-            task_type = "official_opening" if case.key == "live_open" else "discovery"
+        case: PlannerIntentCase = next(self.cases)
+        task_type = case.expected_tool_intent
+        categories = [
+            {"category": category, "quantity": case.category_limits.get(category)}
+            for category in case.categories
+        ]
         output = SemanticPlan.model_validate(
             {
                 "request_language": case.language,
-                "response_language": case.language,
-                "city": city,
+                "response_language": case.expected_response_language,
+                "city": "turin",
                 "mode": "single",
                 "tasks": [
                     {
                         "task_type": task_type,
-                        "goal": "recommend",
+                        "goal": case.expected_goal,
                         "query": case.query,
                         "categories": categories,
                         "preferences": [],
-                        "nearby": nearby,
-                        "radius_km": radius_km,
-                        "wants_transport": wants_transport,
+                        "target_place_name": case.target_place_name,
+                        "nearby": case.nearby,
+                        "radius_km": case.radius_km,
+                        "wants_transport": case.expected_wants_transport,
                     }
                 ],
             }
@@ -75,69 +63,56 @@ class FailingIntentProvider:
 
 
 class IntentEvaluationTests(unittest.TestCase):
-    def test_suite_contains_13_capability_cases_and_68_taxonomy_cases(self) -> None:
-        self.assertEqual(len(INTENT_EVALUATION_CASES), 81)
-        self.assertEqual(
-            sum(isinstance(case, IntentCase) for case in INTENT_EVALUATION_CASES),
-            13,
-        )
-        self.assertEqual(
-            sum(
-                isinstance(case, CategoryIntentCase)
-                for case in INTENT_EVALUATION_CASES
-            ),
-            68,
-        )
+    def test_v1_dataset_contains_115_cases(self) -> None:
+        self.assertEqual(len(PLANNER_INTENT_CASES), 115)
+        self.assertEqual(len({case.case_id for case in PLANNER_INTENT_CASES}), 115)
 
+    def test_production_suite_excludes_contract_mismatches(self) -> None:
+        production = intent_cases_for_suite("production")
+        self.assertTrue(production)
+        self.assertTrue(all(case.scorable for case in production))
+        self.assertLess(len(production), len(PLANNER_INTENT_CASES))
 
-    def test_smoke_suite_is_smaller_than_full_suite(self) -> None:
+    def test_smoke_suite_is_small_and_scorable(self) -> None:
         smoke = intent_cases_for_suite("smoke")
-        full = intent_cases_for_suite("full")
+        self.assertGreaterEqual(len(smoke), 10)
+        self.assertLess(len(smoke), len(intent_cases_for_suite("production")))
+        self.assertTrue(all(case.scorable for case in smoke))
 
-        self.assertEqual(len(smoke), 25)
-        self.assertLess(len(smoke), len(full))
-
-    def test_smoke_suite_keeps_safety_critical_cases(self) -> None:
-        keys = {case.key for case in intent_cases_for_suite("smoke")}
-        self.assertTrue(
-            {
-                "transport",
-                "live_open",
-                "unsupported_city",
-                "unverified_rating",
-            }.issubset(keys)
+    def test_passing_provider_scores_every_production_case(self) -> None:
+        production = intent_cases_for_suite("production")
+        report = evaluate_intent_model(
+            PassingIntentProvider(production), model="fake", suite="production"
         )
-
-    def test_passing_provider_scores_every_intent_case(self) -> None:
-        report = evaluate_intent_model(PassingIntentProvider(), model="fake")
-
-        self.assertEqual(report["passed_cases"], len(INTENT_EVALUATION_CASES))
+        self.assertEqual(report["passed_cases"], len(production))
         self.assertEqual(report["metrics"]["field_accuracy_percent"], 100.0)
-        self.assertEqual(report["metrics"]["raw_semantic_accuracy_percent"], 100.0)
         self.assertEqual(report["metrics"]["schema_validity_percent"], 100.0)
         self.assertEqual(report["errors"]["total"], 0)
 
-
-    def test_evaluator_uses_the_same_language_envelope_as_the_assistant(self) -> None:
-        import json
-
-        provider = PassingIntentProvider()
-        evaluate_intent_model(provider, model="fake")
-
+    def test_evaluator_uses_production_language_envelope(self) -> None:
+        smoke = intent_cases_for_suite("smoke")
+        provider = PassingIntentProvider(smoke)
+        evaluate_intent_model(provider, model="fake", suite="smoke")
         first = json.loads(provider.user_prompts[0])
-        italian = json.loads(provider.user_prompts[1])
         self.assertEqual(first["conversation_history"], [])
-        self.assertEqual(first["ui_language"], "en")
-        self.assertEqual(italian["ui_language"], "it")
+        self.assertEqual(first["supported_response_languages"], list(SUPPORTED_LANGUAGE_CODES))
         self.assertIn("current_user_message", first)
 
-    def test_provider_failures_are_reported_without_crashing(self) -> None:
-        report = evaluate_intent_model(FailingIntentProvider(), model="fake")
+    def test_all_suite_records_unscorable_cases_as_skipped(self) -> None:
+        scorable = [case for case in PLANNER_INTENT_CASES if case.scorable]
+        provider = PassingIntentProvider(scorable)
+        report = evaluate_intent_model(provider, model="fake", suite="all")
+        self.assertEqual(report["dataset_cases"], 115)
+        self.assertEqual(report["scored_cases"], len(scorable))
+        self.assertEqual(report["skipped_cases"], 115 - len(scorable))
 
-        self.assertEqual(report["passed_cases"], 0)
-        self.assertEqual(
-            report["errors"]["provider"], len(INTENT_EVALUATION_CASES)
+    def test_provider_failures_are_reported_without_crashing(self) -> None:
+        production = intent_cases_for_suite("production")
+        report = evaluate_intent_model(
+            FailingIntentProvider(), model="fake", suite="production"
         )
+        self.assertEqual(report["passed_cases"], 0)
+        self.assertEqual(report["errors"]["provider"], len(production))
         self.assertEqual(report["metrics"]["response_success_percent"], 0.0)
         self.assertIsNone(report["metrics"]["schema_validity_percent"])
 
