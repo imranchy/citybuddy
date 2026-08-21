@@ -1,0 +1,3 @@
+﻿dataset,cases,primary_role,coverage
+planner_intent_v1,115,small planner/intent model,all leaf categories; quantities; multilingual; routing; ambiguity
+capability_suite_v1,46,larger reasoning/tool/RAG model,semantic retrieval; BGE RAG; weather; transport; web; grounding; chaining
