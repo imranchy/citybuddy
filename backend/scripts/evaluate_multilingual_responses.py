@@ -2,7 +2,8 @@ import argparse
 import json
 from time import perf_counter
 
-from app.llm.ollama import OllamaProvider
+from app.core.config import settings
+from app.llm.vllm import VLLMProvider
 from app.llm.prompts import ASSISTANT_RESPONSE_SYSTEM_PROMPT
 from app.llm.schemas import GroundedResponse
 
@@ -20,11 +21,11 @@ def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
             "Manually inspect direct multilingual CityBuddy response quality using the "
-            "existing Ollama response model. No translation model is involved."
+            "configured vLLM response model. No translation model is involved."
         )
     )
-    parser.add_argument("--model", default="gemma3:12b-it-qat")
-    parser.add_argument("--ollama-url", default="http://127.0.0.1:11434")
+    parser.add_argument("--model", default=settings.vllm_response_model or settings.vllm_planner_model)
+    parser.add_argument("--vllm-url", default=settings.vllm_base_url)
     parser.add_argument("--timeout", type=float, default=120.0)
     return parser.parse_args()
 
@@ -73,8 +74,11 @@ def prompt(language: str, language_name: str) -> str:
 
 def main() -> None:
     arguments = parse_arguments()
-    provider = OllamaProvider(
-        base_url=arguments.ollama_url,
+    if not arguments.vllm_url or not settings.vllm_api_key:
+        raise SystemExit("VLLM_BASE_URL and VLLM_API_KEY must be configured.")
+    provider = VLLMProvider(
+        base_url=arguments.vllm_url,
+        api_key=settings.vllm_api_key,
         timeout_seconds=arguments.timeout,
     )
     print(f"Model: {arguments.model}")

@@ -4,7 +4,7 @@ from sqlalchemy import select
 
 from app.core.config import settings
 from app.db.database import SessionLocal
-from app.llm.embeddings import OllamaEmbeddingProvider
+from app.llm.embeddings import VLLMEmbeddingProvider
 from app.models.place import Place
 from app.services.official_documents import (
     OFFICIAL_DOCUMENT_TOPICS,
@@ -86,15 +86,23 @@ def main() -> None:
             print("Preview complete. No evidence or embeddings were changed.")
             return
 
-        provider = OllamaEmbeddingProvider(
-            base_url=settings.ollama_embedding_base_url or settings.ollama_base_url,
-            timeout_seconds=max(settings.ollama_timeout_seconds, 120),
+        embedding_base_url = settings.vllm_embedding_base_url or settings.vllm_base_url
+        embedding_api_key = settings.vllm_embedding_api_key or settings.vllm_api_key
+        if not embedding_base_url or not embedding_api_key:
+            raise SystemExit(
+                "VLLM_BASE_URL/VLLM_API_KEY (or dedicated embedding equivalents) "
+                "must be configured before indexing embeddings."
+            )
+        provider = VLLMEmbeddingProvider(
+            base_url=embedding_base_url,
+            api_key=embedding_api_key,
+            timeout_seconds=max(settings.vllm_timeout_seconds, 120),
         )
         indexed = index_evidence_candidates(
             database,
             candidates=pending,
             provider=provider,
-            model=settings.ollama_embedding_model,
+            model=settings.vllm_embedding_model,
             batch_size=arguments.batch_size,
             progress=lambda completed, total: print(
                 f"Indexed {completed}/{total} official document chunks...", flush=True
@@ -106,7 +114,7 @@ def main() -> None:
         )
         print(
             f"Indexed {indexed} changed official chunks with "
-            f"{settings.ollama_embedding_model}; retired {removed} stale chunks."
+            f"{settings.vllm_embedding_model}; retired {removed} stale chunks."
         )
     finally:
         database.close()

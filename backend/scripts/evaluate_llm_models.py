@@ -7,16 +7,12 @@ from typing import Any
 from dotenv import load_dotenv
 
 from app.llm.evaluation import evaluate_model
-from app.llm.ollama import OllamaProvider
+from app.core.config import settings
+from app.llm.vllm import VLLMProvider
 from app.llm.tracing import TraceConfig
 
 
-DEFAULT_MODELS = (
-    "gemma3:4b",
-    "llama3.1:8b",
-    "qwen3:8b",
-    "gemma3:12b-it-qat",
-)
+DEFAULT_MODELS = ("Qwen/Qwen3-1.7B", "Qwen/Qwen3-4B")
 
 
 def positive_float(value: str) -> float:
@@ -34,9 +30,9 @@ def parse_arguments() -> argparse.Namespace:
         "--model",
         dest="models",
         action="append",
-        help="Ollama model name; repeat to compare models.",
+        help="vLLM model name; repeat to compare models.",
     )
-    parser.add_argument("--ollama-url", default="http://127.0.0.1:11434")
+    parser.add_argument("--vllm-url", default=settings.vllm_base_url)
     parser.add_argument("--timeout", type=positive_float, default=120.0)
     parser.add_argument(
         "--output-dir",
@@ -106,8 +102,11 @@ def main() -> None:
     load_dotenv()
     arguments = parse_arguments()
     models = tuple(arguments.models or DEFAULT_MODELS)
-    provider = OllamaProvider(
-        base_url=arguments.ollama_url,
+    if not arguments.vllm_url or not settings.vllm_api_key:
+        raise SystemExit("VLLM_BASE_URL and VLLM_API_KEY must be configured.")
+    provider = VLLMProvider(
+        base_url=arguments.vllm_url,
+        api_key=settings.vllm_api_key,
         timeout_seconds=arguments.timeout,
     )
     trace_config = TraceConfig.from_environment(
@@ -127,14 +126,10 @@ def main() -> None:
             f"errors {result['errors']['total']}; "
             f"warm p95 {result['latency']['warm_p95_ms']} ms"
         )
-        try:
-            provider.unload_model(model)
-        except Exception as error:
-            print(f"  Warning: {error}")
 
     report = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
-        "ollama_url": arguments.ollama_url,
+        "vllm_url": arguments.vllm_url,
         "langsmith": {
             "enabled": trace_config.enabled,
             "project": trace_config.project if trace_config.enabled else None,

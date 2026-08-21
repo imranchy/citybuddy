@@ -1,8 +1,8 @@
 # CityBuddy grounded assistant
 
-The first conversational API uses a provider-neutral structured-model contract
-with Ollama as the configured local provider. It does not give the model SQL,
-database credentials, or unrestricted tool access.
+The conversational API uses a provider-neutral structured-model contract with vLLM
+as the sole inference runtime. It does not give the model SQL, database credentials,
+or unrestricted tool access.
 
 ## Request flow
 
@@ -63,7 +63,7 @@ tool execution.
 ## Grounded semantic evidence (Milestone A)
 
 Approved production place rows can be converted into attributed evidence and
-embedded locally with Ollama `bge-m3`. PostgreSQL stores the 1024-dimensional
+embedded through a vLLM-served `BAAI/bge-m3` endpoint. PostgreSQL stores the 1024-dimensional
 vectors through pgvector. For qualitative, indirect, or contextual requests the assistant embeds the current
 request and ranks evidence across reviewed places that pass deterministic city,
 category, geographic and conversation-context filters. Simple explicit category
@@ -79,10 +79,12 @@ A separate transit action appears only when public transport was requested.
 The indexer remains preview-first and never imports external documents:
 
 ```cmd
-ollama pull bge-m3
 python -m scripts.index_place_evidence --city Torino
 python -m scripts.index_place_evidence --city Torino --apply
 ```
+
+`VLLM_EMBEDDING_BASE_URL` and `VLLM_EMBEDDING_API_KEY` may point to a dedicated
+vLLM embedding server. When unset, the indexer reuses the main vLLM endpoint and key.
 
 Re-running the command indexes only new or changed fingerprints. It is safe to
 run after an approved staging promotion; it does not promote staged places and
@@ -121,7 +123,7 @@ milestone, so no chat transcript is stored in the database.
   evidence belonging to that same place.
 - Unknown IDs, unsupported attributes, contradictions, duplicate IDs, and
   malformed abstentions cause deterministic fallback.
-- When Ollama is unavailable or output validation fails, CityBuddy returns
+- When vLLM is unavailable or output validation fails, CityBuddy returns
   reviewed database results with an explicit warning.
 - A nearby request without coordinates asks the client for location.
 - Unsupported cities return no recommendations. Torino is the only supported
@@ -136,30 +138,30 @@ routes, departure times, disruptions, and availability in Google Maps.
 
 ## Local run
 
-Start PostgreSQL/PostGIS and Ollama, then run the API from `backend`:
+Start PostgreSQL/PostGIS and the configured vLLM server, then run the API from `backend`:
 
 ```cmd
 uvicorn app.main:app --reload
 ```
 
-The configured intent model defaults to `qwen3:8b`; the grounded response model
-defaults to `gemma3:12b-it-qat`. Both are served by the same provider-neutral
-interface and local Ollama API. Ollama hosts the models, while CityBuddy routes
-each application task to the configured role. Interactive API docs are
-available at `http://127.0.0.1:8000/docs`.
+`VLLM_BASE_URL` and `VLLM_API_KEY` are required for assistant AI. The planner defaults
+to `Qwen/Qwen3-1.7B`; `VLLM_RESPONSE_MODEL` may select a separate response model and
+otherwise reuses the planner model. The same configuration contract can target local
+vLLM during development or an authenticated remote vLLM endpoint in production.
+Interactive API docs are available at `http://127.0.0.1:8000/docs`.
 
 Before browser testing, run the intent-only benchmark and direct CLI assistant:
 
 ```cmd
-python -m scripts.evaluate_intent_models --model qwen3:8b --suite smoke
+python -m scripts.evaluate_intent_models --model Qwen/Qwen3-1.7B --suite smoke
 python -m scripts.run_assistant_cli "Recommend two museums in Turin" --language en
 python -m scripts.run_assistant_cli "Consigliami due musei a Torino" --language it
 ```
 
-Model splitting can reduce generation cost, but two models may compete for GPU
-memory. Compare warm latency and observe `ollama ps`; if model swapping erases
-the speed benefit, CityBuddy can configure the response model for both roles
-without changing the service flow.
+Model splitting can reduce generation cost, but two concurrently served models may compete
+for GPU memory. Benchmark Qwen3-1.7B and Qwen3-4B sequentially on the laptop GPU; if
+serving both roles separately is not practical, CityBuddy can use one configured model
+for both roles without changing the service flow.
 
 Automated tests use fake providers and retrievers and do not require live model
 calls:
@@ -188,7 +190,7 @@ exhibitions, prices, and general official-place information such as shops/brands
 collections, facilities, accessibility, services, parking and amenities. The user's
 question may rank already-extracted same-domain links but cannot authorize a URL.
 
-Before Gemma answers, CityBuddy selects a compact verbatim evidence window from the
+Before the response model answers, CityBuddy selects a compact verbatim evidence window from the
 verified official page. Claims must match that evidence (allowing whitespace-only HTML
 layout differences). Today/now answers also receive the supported city's application-
 owned local date and weekday. If a page is unverified, dynamically rendered with no
@@ -213,12 +215,13 @@ keeps future language additions primarily in UI copy, planner evaluation, and la
 configuration rather than duplicating NLP rules throughout the backend.
 
 Compound plans execute as a bounded sequence of ordinary CityBuddy retrieval/tool tasks.
-Gemma receives the validated task results, reviewed place records, RAG evidence, structured
+The response model receives the validated task results, reviewed place records, RAG evidence, structured
 place facts, conversation context, distance/transit information, and application-owned time
 context, then performs comparison, trade-off reasoning, itinerary synthesis, and natural
 response composition. Models still have no arbitrary SQL, filesystem, shell, or unrestricted
 network access.
 
-Planner and response inference can be isolated operationally with
-`OLLAMA_PLANNER_BASE_URL` and `OLLAMA_RESPONSE_BASE_URL`. If those variables are empty,
-CityBuddy keeps the existing single-Ollama local behavior.
+Planner and response inference use the OpenAI-compatible vLLM endpoint configured by
+`VLLM_BASE_URL` and `VLLM_API_KEY`. Model roles remain independently configurable with
+`VLLM_PLANNER_MODEL` and `VLLM_RESPONSE_MODEL`, so the endpoint can move from local
+development to remote production inference without changing service code.

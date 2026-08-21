@@ -6,7 +6,7 @@ from sqlalchemy import select
 from app.core.config import settings
 from app.core.ingestion import missing_enrichment_updates
 from app.db.database import SessionLocal
-from app.llm.ollama import OllamaError, OllamaProvider
+from app.llm.vllm import VLLMError, VLLMProvider
 from app.models.ingestion import (
     AgentReviewDecision,
     ImageValidationIssue,
@@ -16,7 +16,7 @@ from app.models.ingestion import (
 )
 from app.models.place import Place
 from app.services.ingestion_agents import build_review_graph, review_candidate
-from app.services.review_runner import run_with_ollama_retries
+from app.services.review_runner import run_with_model_retries
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -54,7 +54,7 @@ def parse_arguments() -> argparse.Namespace:
         type=float,
         default=None,
         help=(
-            "Ollama timeout for offline ingestion review. Defaults to at least 90 seconds "
+            "vLLM timeout for offline ingestion review. Defaults to at least 90 seconds "
             "without changing the user-facing assistant timeout."
         ),
     )
@@ -171,21 +171,31 @@ def main() -> None:
     review_timeout = (
         arguments.timeout_seconds
         if arguments.timeout_seconds is not None
-        else max(settings.ollama_timeout_seconds, 90.0)
+        else max(settings.vllm_timeout_seconds, 90.0)
     )
-    ingestion_provider = OllamaProvider(
-        base_url=settings.ollama_ingestion_base_url or settings.ollama_base_url,
+    ingestion_base_url = settings.vllm_ingestion_base_url or settings.vllm_base_url
+    ingestion_api_key = settings.vllm_ingestion_api_key or settings.vllm_api_key
+    if not settings.vllm_base_url or not settings.vllm_api_key:
+        raise SystemExit("VLLM_BASE_URL and VLLM_API_KEY must be configured.")
+    if not ingestion_base_url or not ingestion_api_key:
+        raise SystemExit(
+            "VLLM ingestion endpoint/key could not be resolved from configuration."
+        )
+    ingestion_provider = VLLMProvider(
+        base_url=ingestion_base_url,
+        api_key=ingestion_api_key,
         timeout_seconds=review_timeout,
     )
-    response_provider = OllamaProvider(
-        base_url=settings.ollama_base_url,
+    response_provider = VLLMProvider(
+        base_url=settings.vllm_base_url,
+        api_key=settings.vllm_api_key,
         timeout_seconds=review_timeout,
     )
     graph = build_review_graph(
         qwen_provider=ingestion_provider,
         gemma_provider=response_provider,
-        qwen_model=settings.ollama_ingestion_model,
-        gemma_model=settings.ollama_response_model,
+        qwen_model=settings.vllm_ingestion_model,
+        gemma_model=settings.vllm_response_model or settings.vllm_planner_model,
     )
     counts: Counter[str] = Counter()
     try:
@@ -242,19 +252,19 @@ def main() -> None:
                     candidate=payload,
                 )
 
-            def report_retry(attempt: int, attempts: int, error: OllamaError) -> None:
+            def report_retry(attempt: int, attempts: int, error: VLLMError) -> None:
                 print(
                     f"{candidate_type}/{item.id}: local model call failed "
                     f"(attempt {attempt}/{attempts}); retrying - {error}"
                 )
 
             try:
-                result = run_with_ollama_retries(
+                result = run_with_model_retries(
                     run_review,
                     attempts=arguments.retry_attempts,
                     on_retry=report_retry,
                 )
-            except OllamaError as error:
+            except VLLMError as error:
                 counts["model_error_pending"] += 1
                 print(
                     f"{candidate_type}/{item.id}: model_error_pending after "

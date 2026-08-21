@@ -2,7 +2,7 @@ import argparse
 
 from app.core.config import settings
 from app.db.database import SessionLocal
-from app.llm.embeddings import OllamaEmbeddingProvider
+from app.llm.embeddings import VLLMEmbeddingProvider
 from app.services.rag import index_evidence_candidates, pending_evidence_candidates
 
 
@@ -43,21 +43,29 @@ def main() -> None:
         if not arguments.apply:
             print("Preview complete. No evidence or embeddings were changed.")
             return
-        provider = OllamaEmbeddingProvider(
-            base_url=settings.ollama_embedding_base_url or settings.ollama_base_url,
-            timeout_seconds=max(settings.ollama_timeout_seconds, 120),
+        embedding_base_url = settings.vllm_embedding_base_url or settings.vllm_base_url
+        embedding_api_key = settings.vllm_embedding_api_key or settings.vllm_api_key
+        if not embedding_base_url or not embedding_api_key:
+            raise SystemExit(
+                "VLLM_BASE_URL/VLLM_API_KEY (or dedicated embedding equivalents) "
+                "must be configured before indexing embeddings."
+            )
+        provider = VLLMEmbeddingProvider(
+            base_url=embedding_base_url,
+            api_key=embedding_api_key,
+            timeout_seconds=max(settings.vllm_timeout_seconds, 120),
         )
         indexed = index_evidence_candidates(
             database,
             candidates=candidates,
             provider=provider,
-            model=settings.ollama_embedding_model,
+            model=settings.vllm_embedding_model,
             batch_size=arguments.batch_size,
             progress=lambda completed, total: print(
                 f"Indexed {completed}/{total} evidence records...", flush=True
             ),
         )
-        print(f"Indexed {indexed} evidence records with {settings.ollama_embedding_model}.")
+        print(f"Indexed {indexed} evidence records with {settings.vllm_embedding_model}.")
     finally:
         database.close()
 

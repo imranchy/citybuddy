@@ -4,7 +4,7 @@ from sqlalchemy import select
 
 from app.core.config import settings
 from app.db.database import SessionLocal
-from app.llm.ollama import OllamaProvider
+from app.llm.vllm import VLLMProvider
 from app.models.place import Place
 from app.services.official_facts import (
     collect_official_fact_candidates,
@@ -46,9 +46,17 @@ def require_reviewed_place(database, *, place_id: int | None, city: str) -> None
 
 def main() -> None:
     arguments = parse_arguments()
-    provider = OllamaProvider(
-        base_url=settings.ollama_ingestion_base_url or settings.ollama_base_url,
-        timeout_seconds=max(settings.ollama_timeout_seconds, 120),
+    ingestion_base_url = settings.vllm_ingestion_base_url or settings.vllm_base_url
+    ingestion_api_key = settings.vllm_ingestion_api_key or settings.vllm_api_key
+    if not ingestion_base_url or not ingestion_api_key:
+        raise SystemExit(
+            "VLLM_BASE_URL/VLLM_API_KEY (or dedicated ingestion equivalents) "
+            "must be configured before official-fact extraction."
+        )
+    provider = VLLMProvider(
+        base_url=ingestion_base_url,
+        api_key=ingestion_api_key,
+        timeout_seconds=max(settings.vllm_timeout_seconds, 120),
     )
     database = SessionLocal()
     try:
@@ -57,7 +65,7 @@ def main() -> None:
             database,
             city=arguments.city,
             provider=provider,
-            model=settings.ollama_ingestion_model,
+            model=settings.vllm_ingestion_model,
             place_limit=arguments.place_limit,
             place_id=arguments.place_id,
         )
